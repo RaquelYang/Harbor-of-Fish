@@ -1,6 +1,6 @@
 name = "implementer"
-description = "使用 Codex GPT-5.6 Luna 負責實作功能與修正問題。"
-model = "gpt-5.6-luna"
+description = "使用 Codex GPT-6 Luna 負責實作功能與修正問題。"
+model = "gpt-6-luna"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 

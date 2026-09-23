@@ -262,7 +262,7 @@ class Orchestrator:
                 "-c",
                 'model_provider="openai"',
                 "--model",
-                "gpt-5.6-luna",
+                "gpt-6-luna",
                 "--sandbox",
                 "workspace-write",
                 prompt,

@@ -202,7 +202,7 @@ argv = ["fake-build"]
         gemma = runner._model_argv("reviewer", "review")
         self.assertEqual(
             luna[:8],
-            ["codex", "exec", "-c", 'model_provider="openai"', "--model", "gpt-5.6-luna", "--sandbox", "workspace-write"],
+            ["codex", "exec", "-c", 'model_provider="openai"', "--model", "gpt-6-luna", "--sandbox", "workspace-write"],
         )
         self.assertEqual(
             gemma[:10],
