@@ -14,12 +14,10 @@
 
 1. 主 agent 先確認需求、驗收條件、相關檔案與目前工作區狀態。
 2. 先啟動 `implementer`。它必須先檢查相關程式碼、`AGENTS.md`、`git status` 與現有測試，再進行最小必要修改。
-3. 等 `implementer` 完成修改與驗證後，才啟動 `reviewer`。
-   - 僅在直接派送 reviewer 時，ChatGPT account 回報 Gemma 不支援，才使用以下 fallback；這不是一般 delegation 的替代流程。
-   - 在 repository root 直接啟動 Gemma 唯讀 Codex session，要求它讀取 `.codex/agents/reviewer.toml`，並遵守其中的 `developer_instructions`，審查目前的 git diff、相關程式碼、測試與設定：
-     ```sh
-     codex --oss --local-provider ollama --model gemma4:31b-cloud exec --ephemeral --sandbox read-only "Read .codex/agents/reviewer.toml and follow its developer_instructions to review the current git diff, relevant code, tests, and configuration. Do not modify files or change workspace state. Return findings and any unverified areas."
-     ```
+3. 等 `implementer` 完成修改與驗證後，主 agent 每次都必須從 repository root 執行以下 Ollama 唯讀 reviewer 命令，審查目前的 git diff、相關程式碼、測試與設定。所有初次審查與修正後複查都固定使用此命令，不透過 ChatGPT account 直接派送 `reviewer`：
+   ```sh
+   codex --oss --local-provider ollama --model gemma4:31b-cloud exec --ephemeral --sandbox read-only "Read .codex/agents/reviewer.toml and follow its developer_instructions to review the current git diff, relevant code, tests, and configuration. Do not modify files or change workspace state. Return findings and any unverified areas."
+   ```
 4. `reviewer` 只讀檢查目前的 `git diff`、相關程式碼、測試與設定，不得修改檔案或改變工作區狀態。
 5. 主 agent 彙整實作與審查結果：
    - 沒有實質問題時，回報修改檔案、驗證結果與未解決風險。
