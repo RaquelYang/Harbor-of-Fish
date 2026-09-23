@@ -2,34 +2,28 @@
 
 ## 角色分工
 
-本專案使用兩個 project agents：
+本專案採 Codex 規劃、Ollama 執行的流程：
 
-- `implementer`：負責需求實作、問題修正，以及執行與修改範圍相符的驗證。
-- `reviewer`：負責唯讀檢查實作結果、回歸風險、安全性與測試缺口。
-- 主 agent：負責拆解需求、依序派工、傳遞審查結果，並決定是否完成或要求修正。
+- Codex 預設使用 `gpt-6-luna`，負責理解一般實作需求、檢查工作區並輸出完整計畫，不直接修改產品檔案。
+- Ollama `gemma4:31b-cloud` 負責實作與唯讀審查，兩個角色由 runner 以獨立 Codex CLI sessions 執行。
+- 明確要求只規劃或只檢查時，只回應該要求，不啟動 runner。
 
 ## 標準協作流程
 
-涉及程式碼、設定或內容修改的任務，原則上依以下順序執行：
+一般程式碼、設定或內容實作需求依以下順序自動執行：
 
-1. 主 agent 先確認需求、驗收條件、相關檔案與目前工作區狀態。
-2. 先啟動 `implementer`。它必須先檢查相關程式碼、`AGENTS.md`、`git status` 與現有測試，再進行最小必要修改。
-3. 等 `implementer` 完成修改與驗證後，主 agent 每次都必須從 repository root 執行以下 Ollama 唯讀 reviewer 命令，審查目前的 git diff、相關程式碼、測試與設定。所有初次審查與修正後複查都固定使用此命令，不透過 ChatGPT account 直接派送 `reviewer`：
-   ```sh
-   codex --oss --local-provider ollama --model gemma4:31b-cloud exec --ephemeral --sandbox read-only "Read .codex/agents/reviewer.toml and follow its developer_instructions to review the current git diff, relevant code, tests, and configuration. Do not modify files or change workspace state. Return findings and any unverified areas."
-   ```
-4. `reviewer` 只讀檢查目前的 `git diff`、相關程式碼、測試與設定，不得修改檔案或改變工作區狀態。
-5. 主 agent 彙整實作與審查結果：
-   - 沒有實質問題時，回報修改檔案、驗證結果與未解決風險。
-   - 發現 P0/P1 問題時，將具體 findings 傳回 `implementer` 修正，重新驗證後再讓 `reviewer` 複查一次。
-6. 最多執行五輪「審查 → 修正 → 複查」循環；若五輪後仍有問題，明確回報並交由使用者決定下一步。
+1. Codex 檢查需求、修改範圍、驗收條件、合適的驗證命令及工作區狀態。
+2. 只有工作區乾淨時才繼續；有任何未提交變更便停止並回報，不自行清理或改寫。
+3. Codex 將計畫寫成 repository 外的暫存 JSON 檔，欄位必須是 `request`、`scope`、`acceptance_criteria`、`validation_commands`。驗證命令使用具名 argv 陣列。
+4. 若尚未設定 `ollama-launch` profile，先依 Ollama 官方方式執行 `ollama launch codex --config`，並確認 profile 存在。將計畫傳給 `.codex/orchestrator/run.py --plan <暫存檔>`。runner 以 `codex --profile ollama-launch --model gemma4:31b-cloud exec --ephemeral --sandbox workspace-write` 呼叫 implementer，再用另一個 `read-only` session 呼叫 reviewer；兩次呼叫都明確要求遵循對應的 `.codex/agents/*.toml` 指令。
+5. runner 執行計畫內列出的驗證；驗證失敗或有效 JSON 審查結果包含 P0/P1 時，將證據交回 implementer 修正後重跑驗證與審查，最多五輪。P2/P3 不阻擋完成。
+6. 審查輸出必須符合 runner 驗證的 JSON 合約。所有輪次都保存計畫、基準 SHA、提示與模型輸出、驗證結果、diff、審查 findings 及最終摘要。
+7. 主 agent 彙整 runner 結果及仍未驗證的事項。
 
 ## 並行與工作區規則
 
-- `implementer` 與 `reviewer` 不得同時執行依賴同一份工作區狀態的任務。
-- 不要讓兩個 agent 同時修改同一工作區或同一批檔案。
-- 只有彼此獨立且不會讀寫相同檔案的探索或分析工作，才適合平行執行。
-- 必須保留使用者原有的未提交修改，不得重設、覆寫或清除無關變更。
+- implementer 與 reviewer 必須依序執行；reviewer 使用唯讀 sandbox。
+- 必須保留使用者原有的未提交修改；runner 遇到髒工作區即停止。
 
 ## Git 與外部操作
 
@@ -39,5 +33,5 @@
 
 ## Runner 啟動條件
 
-- 主 agent 只有在使用者明確要求執行本專案 runner 時，才能啟動 `.codex/orchestrator/run.py`。
-- 一般實作、檢查或審查請依本文件的 agent 分工處理，不得自行啟動多模型迴圈。
+- 一般實作需求在 Codex 完成計畫且工作區乾淨後，自動啟動 `.codex/orchestrator/run.py`。
+- 使用者明確要求只規劃或只檢查時，不啟動 runner。

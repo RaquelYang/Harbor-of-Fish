@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the Luna implementation / Gemma review loop for this repository.
+"""Run the Ollama implementation / review loop from a Codex-authored plan.
 
 The runner deliberately keeps all subprocesses in argv form (never a shell
 string).  It only performs read-only Git queries itself; model prompts carry
@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import tomllib
@@ -23,7 +24,7 @@ from typing import Any, Callable, Sequence
 DEFAULT_MAX_ROUNDS = 5
 DEFAULT_MODEL_RETRIES = 2
 DEFAULT_TIMEOUT_SECONDS = 1_200
-REQUIRED_VALIDATIONS = ("test", "lint", "build")
+REQUIRED_PLAN_FIELDS = {"request", "scope", "acceptance_criteria", "validation_commands"}
 REVIEW_FIELDS = {
     "severity",
     "file",
@@ -133,45 +134,80 @@ def _safe_argv(argv: Sequence[str]) -> list[str]:
     return values
 
 
-def parse_validation_config(path: Path) -> dict[str, list[str]]:
-    """Load required validation commands from TOML argv arrays."""
+def load_validation_allowlist(path: Path) -> dict[str, list[str]]:
+    """Load exact executable validation argv values from trusted repo config."""
 
-    if not path.is_file():
-        raise RunnerError(f"validation configuration does not exist: {path}")
     try:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise RunnerError(f"invalid validation configuration: {exc}") from exc
-
+        raise RunnerError(f"invalid validation allowlist {path}: {exc}") from exc
+    commands = data.get("commands")
+    if not isinstance(commands, dict) or not commands:
+        raise RunnerError("validation allowlist must define a non-empty [commands] table")
+    allowlist: dict[str, list[str]] = {}
+    for name, specification in commands.items():
+        if not isinstance(name, str) or not name.strip() or not isinstance(specification, dict):
+            raise RunnerError("validation allowlist entries must be named tables")
+        argv = specification.get("argv")
+        if not isinstance(argv, list) or not argv or not all(isinstance(arg, str) and arg.strip() for arg in argv):
+            raise RunnerError(f"validation allowlist command {name!r} must have a non-empty string argv")
+        allowlist[name] = _safe_argv(argv)
     validation = data.get("validation", {})
-    required = validation.get("required", list(REQUIRED_VALIDATIONS))
-    if not isinstance(required, list) or not required or not all(isinstance(x, str) for x in required):
-        raise RunnerError("validation.required must be a non-empty string array")
-    missing = set(REQUIRED_VALIDATIONS) - set(required)
+    if not isinstance(validation, dict):
+        raise RunnerError("validation allowlist [validation] entry must be a table")
+    required = validation.get("required", [])
+    if not isinstance(required, list) or not all(isinstance(name, str) for name in required):
+        raise RunnerError("validation.required must be a string array")
+    missing = set(required) - allowlist.keys()
     if missing:
-        raise RunnerError("validation.required is missing: " + ", ".join(sorted(missing)))
-    command_table = data.get("commands", {})
-    if not isinstance(command_table, dict):
-        raise RunnerError("validation.commands must be a TOML table")
+        raise RunnerError("validation.required has no allowlist command: " + ", ".join(sorted(missing)))
+    return allowlist
 
-    result: dict[str, list[str]] = {}
-    for name in required:
-        specification: Any = command_table.get(name, data.get(name))
-        if isinstance(specification, dict):
-            specification = specification.get("argv")
-        if not isinstance(specification, list) or not specification or not all(
-            isinstance(value, str) and value.strip() for value in specification
+
+def parse_plan(raw: str, allowed_commands: dict[str, list[str]]) -> dict[str, Any]:
+    """Validate a Codex plan against exact command argv values from repo config."""
+
+    try:
+        plan = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RunnerError(f"plan is not valid JSON: {exc}") from exc
+    if not isinstance(plan, dict) or set(plan) != REQUIRED_PLAN_FIELDS:
+        raise RunnerError("plan must contain exactly request, scope, acceptance_criteria, and validation_commands")
+    if not isinstance(plan["request"], str) or not plan["request"].strip():
+        raise RunnerError("plan.request must be a non-empty string")
+    for field in ("scope", "acceptance_criteria"):
+        values = plan[field]
+        if not isinstance(values, list) or not values or not all(isinstance(item, str) and item.strip() for item in values):
+            raise RunnerError(f"plan.{field} must be a non-empty string array")
+    commands = plan["validation_commands"]
+    if not isinstance(commands, dict) or not commands:
+        raise RunnerError("plan.validation_commands must be a non-empty object")
+    validated: dict[str, list[str]] = {}
+    for name, argv in commands.items():
+        if not isinstance(name, str) or not name.strip() or not isinstance(argv, list) or not all(
+            isinstance(value, str) and value.strip() for value in argv
         ):
-            raise RunnerError(f"required validation command is not configured: {name}")
-        result[name] = _safe_argv(specification)
-    return result
+            raise RunnerError("each validation command must map a name to a non-empty argv array")
+        allowed_argv = allowed_commands.get(name)
+        if allowed_argv is None or argv != allowed_argv:
+            raise RunnerError(f"validation command is not allowlisted exactly: {name}")
+        validated[name] = list(allowed_argv)
+    plan["validation_commands"] = validated
+    return plan
 
 
 def parse_review_json(raw: str) -> dict[str, Any]:
-    """Validate Gemma's exact machine-readable review contract."""
+    """Validate Gemma's review JSON, optionally wrapped in one complete JSON fence."""
+
+    normalized = raw.strip()
+    if normalized.startswith("```") or normalized.endswith("```"):
+        match = re.fullmatch(r"```json[ \t]*\r?\n(.*?)\r?\n```", normalized, flags=re.IGNORECASE | re.DOTALL)
+        if not match:
+            raise ReviewError("review output must be bare JSON or one complete ```json fenced block")
+        normalized = match.group(1).strip()
 
     try:
-        value = json.loads(raw)
+        value = json.loads(normalized)
     except json.JSONDecodeError as exc:
         raise ReviewError(f"review output is not valid JSON: {exc}") from exc
     if not isinstance(value, dict) or set(value) != {"status", "findings", "unverified"}:
@@ -191,6 +227,9 @@ def parse_review_json(raw: str) -> dict[str, Any]:
         for field in REVIEW_FIELDS - {"line"}:
             if not isinstance(finding[field], str):
                 raise ReviewError(f"finding field must be a string: {field}")
+    has_blocking = any(finding["severity"] in {"P0", "P1"} for finding in findings)
+    if (value["status"] == "needs_fix") != has_blocking:
+        raise ReviewError("review status must be needs_fix exactly when P0/P1 findings are present")
     if not isinstance(value["unverified"], list) or not all(
         isinstance(item, str) for item in value["unverified"]
     ):
@@ -211,7 +250,7 @@ class Orchestrator:
         process_runner: ProcessRunner = run_process,
     ) -> None:
         self.repo_root = repo_root.resolve()
-        self.validation_path = (validation_path or Path(".codex/validation.toml"))
+        self.validation_path = validation_path or Path(".codex/validation.toml")
         if not self.validation_path.is_absolute():
             self.validation_path = self.repo_root / self.validation_path
         self.runs_path = runs_path or (self.repo_root / ".codex/runs")
@@ -234,7 +273,7 @@ class Orchestrator:
         if status.returncode != 0:
             raise RunnerError(f"unable to inspect Git worktree: {status.stderr.strip()}")
         if status.stdout.strip():
-            raise DirtyWorktreeError("working tree is not clean; commit or stash changes before starting")
+            raise DirtyWorktreeError("working tree is not clean; stop before starting and preserve existing changes")
         sha = self._git("rev-parse", "HEAD")
         if sha.returncode != 0 or not sha.stdout.strip():
             raise RunnerError(f"unable to determine baseline SHA: {sha.stderr.strip()}")
@@ -255,30 +294,17 @@ class Orchestrator:
         path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     def _model_argv(self, role: str, prompt: str) -> list[str]:
-        if role == "implementer":
+        if role in {"implementer", "reviewer"}:
             return [
                 "codex",
-                "exec",
-                "-c",
-                'model_provider="openai"',
-                "--model",
-                "gpt-6-luna",
-                "--sandbox",
-                "workspace-write",
-                prompt,
-            ]
-        if role == "reviewer":
-            return [
-                "codex",
-                "--oss",
-                "--local-provider",
-                "ollama",
+                "--profile",
+                "ollama-launch",
                 "--model",
                 "gemma4:31b-cloud",
                 "exec",
                 "--ephemeral",
                 "--sandbox",
-                "read-only",
+                "workspace-write" if role == "implementer" else "read-only",
                 prompt,
             ]
         raise ValueError(f"unknown model role: {role}")
@@ -314,61 +340,114 @@ class Orchestrator:
 
     def _implementer_prompt(
         self,
-        task: str,
+        plan: dict[str, Any],
         baseline_sha: str,
         *,
         correction: str | None = None,
     ) -> str:
         extra = f"\n修正背景：\n{correction}\n" if correction else ""
-        return f"""你是本次工作的 implementer。請在目前 repository 完成以下需求：
+        return f"""請先閱讀 `.codex/agents/implementer.toml` 並遵循其 developer_instructions。你是本次工作的 implementer，請依 Codex 計畫在目前 repository 完成需求：
 
-{task}
+{json.dumps(plan, ensure_ascii=False, indent=2)}
 
 基準 SHA：{baseline_sha}。請只修改與需求相關的檔案，保留任何既有使用者變更。
 完成後請自行檢查實作。禁止執行 git add、commit、push、發布、部署或刪除資料；不要修改基準之外的無關內容。
 {extra}"""
 
-    def _reviewer_prompt(self, task: str, baseline_sha: str) -> str:
-        return f"""你是唯讀 reviewer。審查本次需求「{task}」在基準 SHA {baseline_sha} 之後的變更。
+    def _reviewer_prompt(self, plan: dict[str, Any], baseline_sha: str) -> str:
+        return f"""請先閱讀 `.codex/agents/reviewer.toml` 並遵循其 developer_instructions。你是唯讀 reviewer。審查本次 Codex 計畫在基準 SHA {baseline_sha} 之後的變更：
+{json.dumps(plan, ensure_ascii=False, indent=2)}
 變更範圍嚴格限定為基準 SHA 到目前工作樹：執行並檢查 `git diff --no-ext-diff {baseline_sha} --`，並執行 `git ls-files --others --exclude-standard` 找出基準後新增的未追蹤檔案，再只讀取那些未追蹤檔案。不要檢查或修改範圍外的檔案。
 你必須只回傳一個嚴格 JSON 物件，不要 Markdown code fence 或其他文字，格式如下：
 {{"status":"pass|needs_fix","findings":[{{"severity":"P0|P1|P2|P3","file":"path","line":1,"title":"問題標題","evidence":"證據","impact":"影響","reproduction":"重現方式","suggested_fix":"建議修正","tests":"相關測試"}}],"unverified":[]}}
 只有確實需要修改的 P0/P1 才應使用 needs_fix；P2/P3 要保留在 findings 但不阻擋通過。禁止任何檔案修改、Git 寫入、發布、部署或刪除操作。"""
 
-    def run(self, task: str) -> RunResult:
+    def _capture_round_diff(self, baseline_sha: str, round_dir: Path) -> str | None:
+        tracked = self._git("diff", "--no-ext-diff", "--binary", baseline_sha, "--")
+        untracked = self._git("ls-files", "--others", "--exclude-standard")
+        errors = []
+        if tracked.returncode != 0:
+            errors.append(f"git diff exited {tracked.returncode}: {tracked.stderr.strip()}")
+        if untracked.returncode != 0:
+            errors.append(f"git ls-files exited {untracked.returncode}: {untracked.stderr.strip()}")
+        chunks = [tracked.stdout]
+        if untracked.returncode == 0:
+            for relative_path in untracked.stdout.splitlines():
+                result = self._git("diff", "--no-index", "--binary", "--", "/dev/null", relative_path)
+                if result.returncode in (0, 1):
+                    chunks.append(result.stdout)
+                else:
+                    errors.append(
+                        f"git diff --no-index failed for {relative_path!r} "
+                        f"with exit {result.returncode}: {result.stderr.strip()}"
+                    )
+        if errors:
+            message = "; ".join(errors)
+            self._write(round_dir / "diff-error.txt", message + "\n")
+            return message
+        self._write(round_dir / "diff.patch", "\n".join(chunk for chunk in chunks if chunk))
+        return None
+
+    def _diff_failure_result(
+        self,
+        message: str,
+        run_dir: Path,
+        round_number: int,
+        baseline_sha: str,
+    ) -> RunResult:
+        reason = f"unable to capture round diff: {message}"
+        self._write_json(
+            run_dir / "summary.json",
+            {"status": "stopped", "reason": reason, "rounds": round_number},
+        )
+        return RunResult("stopped", reason, round_number, baseline_sha, str(run_dir))
+
+    def run(self, plan_input: str | dict[str, Any]) -> RunResult:
         try:
             baseline_sha = self._baseline()
         except RunnerError as exc:
             return RunResult("stopped", str(exc), 0, None, None)
 
         try:
+            allowlist = load_validation_allowlist(self.validation_path)
+            plan_raw = plan_input if isinstance(plan_input, str) else json.dumps(plan_input, ensure_ascii=False)
+            plan = parse_plan(plan_raw, allowlist)
+        except RunnerError as exc:
+            return RunResult("stopped", str(exc), 0, baseline_sha, None)
+
+        try:
             run_dir = self._new_run_dir()
         except (OSError, RunnerError) as exc:
             return RunResult("stopped", str(exc), 0, baseline_sha, None)
-        self._write_json(run_dir / "metadata.json", {"baseline_sha": baseline_sha, "task": task})
-        try:
-            commands = parse_validation_config(self.validation_path)
-        except RunnerError as exc:
-            self._write_json(run_dir / "summary.json", {"status": "stopped", "reason": str(exc), "rounds": 0})
-            return RunResult("stopped", str(exc), 0, baseline_sha, str(run_dir))
+        self._write_json(run_dir / "plan.json", plan)
+        self._write_json(run_dir / "metadata.json", {"baseline_sha": baseline_sha, "plan": "plan.json"})
+        commands = plan["validation_commands"]
 
         correction: str | None = None
         for round_number in range(1, self.max_rounds + 1):
             round_dir = run_dir / f"round-{round_number:02d}"
             round_dir.mkdir()
             implementer_prompt = self._implementer_prompt(
-                task, baseline_sha, correction=correction
+                plan, baseline_sha, correction=correction
             )
             self._write(round_dir / "implementer-prompt.txt", implementer_prompt)
             try:
                 implementer_output = self._invoke_model("implementer", implementer_prompt, round_dir)
             except ModelError as exc:
+                diff_error = self._capture_round_diff(baseline_sha, round_dir)
+                if diff_error:
+                    reason = f"{exc}; unable to capture diff: {diff_error}"
+                    self._write_json(run_dir / "summary.json", {"status": "stopped", "reason": reason, "rounds": round_number})
+                    return RunResult("stopped", reason, round_number, baseline_sha, str(run_dir))
                 self._write_json(run_dir / "summary.json", {"status": "stopped", "reason": str(exc), "rounds": round_number})
                 return RunResult("stopped", str(exc), round_number, baseline_sha, str(run_dir))
             self._write(round_dir / "implementer-output.txt", implementer_output)
 
             validation_results = self._validation(commands)
             self._write_json(round_dir / "validation.json", [asdict(result) for result in validation_results])
+            diff_error = self._capture_round_diff(baseline_sha, round_dir)
+            if diff_error:
+                return self._diff_failure_result(diff_error, run_dir, round_number, baseline_sha)
             if not self._validation_ok(validation_results):
                 self._write_json(
                     round_dir / "findings.json",
@@ -383,7 +462,7 @@ class Orchestrator:
                     return RunResult("max_rounds", reason, round_number, baseline_sha, str(run_dir))
                 continue
 
-            reviewer_prompt = self._reviewer_prompt(task, baseline_sha)
+            reviewer_prompt = self._reviewer_prompt(plan, baseline_sha)
             self._write(round_dir / "reviewer-prompt.txt", reviewer_prompt)
             try:
                 reviewer_output = self._invoke_model("reviewer", reviewer_prompt, round_dir)
@@ -413,9 +492,8 @@ class Orchestrator:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--task", required=True, help="需求描述")
     parser.add_argument("--repo", type=Path, default=Path.cwd(), help="repository root")
-    parser.add_argument("--validation", type=Path, default=Path(".codex/validation.toml"))
+    parser.add_argument("--plan", type=Path, required=True, help="Codex 計畫 JSON 檔案，需放在 repository 外")
     parser.add_argument("--runs", type=Path, default=None, help="artifact directory")
     parser.add_argument("--max-rounds", type=int, default=DEFAULT_MAX_ROUNDS)
     parser.add_argument("--model-retries", type=int, default=DEFAULT_MODEL_RETRIES)
@@ -433,12 +511,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     runner = Orchestrator(
         args.repo,
-        validation_path=args.validation,
         runs_path=args.runs,
         max_rounds=args.max_rounds,
         model_retries=args.model_retries,
     )
-    result = runner.run(args.task)
+    try:
+        repo_root = args.repo.resolve()
+        plan_path = args.plan.resolve()
+        if plan_path == repo_root or repo_root in plan_path.parents:
+            raise RunnerError("plan JSON must be stored outside the repository")
+        plan = plan_path.read_text(encoding="utf-8")
+    except (OSError, RunnerError) as exc:
+        print(json.dumps({"status": "stopped", "reason": str(exc)}, ensure_ascii=False), file=sys.stderr)
+        return 2
+    result = runner.run(plan)
     print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
     return 0 if result.status == "passed" else 1
 

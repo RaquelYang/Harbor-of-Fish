@@ -1,6 +1,9 @@
 [validation]
 required = ["test", "lint", "build"]
 
+# Reference command argv values for a Codex plan validating this orchestrator.
+# The runner executes the validation_commands embedded in each plan JSON.
+
 [commands.test]
 argv = ["python3", "-m", "unittest", "discover", "-s", ".codex/orchestrator", "-p", "test_*.py"]
 
