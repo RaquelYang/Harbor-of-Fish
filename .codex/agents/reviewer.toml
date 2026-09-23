@@ -1,6 +1,5 @@
 name = "reviewer"
 description = "使用 Ollama Gemma 4 唯讀檢查程式碼變更、回歸風險與測試缺口。"
-model_provider = "ollama"
 model = "gemma4:31b-cloud"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"

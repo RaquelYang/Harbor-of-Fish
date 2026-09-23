@@ -38,3 +38,8 @@
 - agent 不得自行執行 `git add`、`git commit`、`git push`、發布、部署或刪除資料。
 - 這些操作必須由使用者另外明確授權後才可執行。
 - 完成後應回報修改檔案、測試或 lint/build 結果、reviewer findings，以及尚未驗證的部分。
+
+## Runner 啟動條件
+
+- 主 agent 只有在使用者明確要求執行本專案 runner 時，才能啟動 `.codex/orchestrator/run.py`。
+- 一般實作、檢查或審查請依本文件的 agent 分工處理，不得自行啟動多模型迴圈。

@@ -1,0 +1,11 @@
+[validation]
+required = ["test", "lint", "build"]
+
+[commands.test]
+argv = ["python3", "-m", "unittest", "discover", "-s", ".codex/orchestrator", "-p", "test_*.py"]
+
+[commands.lint]
+argv = ["python3", "-c", "from pathlib import Path; compile(Path('.codex/orchestrator/run.py').read_text(encoding='utf-8'), '.codex/orchestrator/run.py', 'exec')"]
+
+[commands.build]
+argv = ["python3", "-c", "from pathlib import Path; [compile(path.read_text(encoding='utf-8'), str(path), 'exec') for path in Path('.codex/orchestrator').glob('*.py')]"]
