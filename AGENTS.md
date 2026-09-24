@@ -2,10 +2,10 @@
 
 ## 角色分工
 
-本專案採 Codex 規劃、Ollama 執行的流程：
+本專案採 Codex 規劃與 GPT-6 Luna 實作、Gemma 唯讀審查的流程：
 
 - Codex 預設使用 `gpt-6-luna`，負責理解一般實作需求、檢查工作區並輸出完整計畫，不直接修改產品檔案。
-- Ollama `gemma4:31b-cloud` 負責實作與唯讀審查，兩個角色由 runner 以獨立 Codex CLI sessions 執行。
+- Implementer 使用 GPT-6 Luna high 與 `workspace-write` sandbox，依計畫實作；reviewer 使用 Ollama `gemma4:31b-cloud` 與 `read-only` sandbox 審查。兩個角色由 runner 以獨立 Codex CLI sessions 執行。
 - 明確要求只規劃或只檢查時，只回應該要求，不啟動 runner。
 
 ## 標準協作流程
@@ -15,7 +15,7 @@
 1. Codex 檢查需求、修改範圍、驗收條件、合適的驗證命令及工作區狀態。
 2. 只有工作區乾淨時才繼續；有任何未提交變更便停止並回報，不自行清理或改寫。
 3. Codex 將計畫寫成 repository 外的暫存 JSON 檔，欄位必須是 `request`、`scope`、`acceptance_criteria`、`validation_commands`。驗證命令使用具名 argv 陣列。
-4. 若尚未設定 `ollama-launch` profile，先依 Ollama 官方方式執行 `ollama launch codex --config`，並確認 profile 存在。將計畫傳給 `.codex/orchestrator/run.py --plan <暫存檔>`。runner 以 `codex --profile ollama-launch --model gemma4:31b-cloud exec --ephemeral --sandbox workspace-write` 呼叫 implementer，再用另一個 `read-only` session 呼叫 reviewer；兩次呼叫都明確要求遵循對應的 `.codex/agents/*.toml` 指令。
+4. 若尚未設定 `ollama-launch` profile，先依 Ollama 官方方式執行 `ollama launch codex --config`，並確認 profile 存在。將計畫傳給 `.codex/orchestrator/run.py --plan <暫存檔>`。runner 以 `codex --model gpt-6-luna exec --ephemeral --sandbox workspace-write` 呼叫 implementer，再以 `codex --profile ollama-launch --model gemma4:31b-cloud exec --ephemeral --sandbox read-only` 呼叫 reviewer；兩次呼叫都明確要求遵循對應的 `.codex/agents/*.toml` 指令。
 5. runner 執行計畫內列出的驗證；驗證失敗或有效 JSON 審查結果包含 P0/P1 時，將證據交回 implementer 修正後重跑驗證與審查，最多五輪。P2/P3 不阻擋完成。
 6. 審查輸出必須符合 runner 驗證的 JSON 合約。所有輪次都保存計畫、基準 SHA、提示與模型輸出、驗證結果、diff、審查 findings 及最終摘要。
 7. 主 agent 彙整 runner 結果及仍未驗證的事項。

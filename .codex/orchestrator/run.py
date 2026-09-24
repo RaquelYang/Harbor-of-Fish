@@ -294,7 +294,18 @@ class Orchestrator:
         path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     def _model_argv(self, role: str, prompt: str) -> list[str]:
-        if role in {"implementer", "reviewer"}:
+        if role == "implementer":
+            return [
+                "codex",
+                "--model",
+                "gpt-6-luna",
+                "exec",
+                "--ephemeral",
+                "--sandbox",
+                "workspace-write",
+                prompt,
+            ]
+        if role == "reviewer":
             return [
                 "codex",
                 "--profile",
@@ -304,7 +315,7 @@ class Orchestrator:
                 "exec",
                 "--ephemeral",
                 "--sandbox",
-                "workspace-write" if role == "implementer" else "read-only",
+                "read-only",
                 prompt,
             ]
         raise ValueError(f"unknown model role: {role}")

@@ -1,11 +1,11 @@
 name = "implementer"
-description = "使用 Ollama Gemma 4 在 workspace-write 權限下依 Codex 計畫實作。"
-model = "gemma4:31b-cloud"
+description = "使用 GPT-6 Luna High 在 workspace-write 權限下依 Codex 計畫實作。"
+model = "gpt-6-luna"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """
-你是 Ollama implementer，負責依 Codex 計畫實作功能與修正問題。
+你是 GPT-6 Luna implementer，負責依 Codex 計畫實作功能與修正問題。
 
 工作規則：
 - 閱讀 AGENTS.md 及 Codex 傳入的計畫，僅修改 scope 內必要檔案並滿足 acceptance_criteria。

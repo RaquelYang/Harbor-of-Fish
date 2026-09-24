@@ -196,15 +196,19 @@ class RunnerTests(unittest.TestCase):
                 self.assertIn(git_subcommand, (round_dir / "diff-error.txt").read_text())
                 self.assertEqual(json.loads((Path(result.run_dir) / "summary.json").read_text())["status"], "stopped")
 
-    def test_model_commands_use_independent_ollama_profile_with_separate_permissions(self):
+    def test_model_commands_route_luna_implementer_and_ollama_reviewer_separately(self):
         fake = FakeProcesses([])
         runner = self._runner(fake)
         luna = runner._model_argv("implementer", "task")
         gemma = runner._model_argv("reviewer", "review")
-        for command, sandbox in ((luna, "workspace-write"), (gemma, "read-only")):
-            self.assertEqual(command[:6], ["codex", "--profile", "ollama-launch", "--model", "gemma4:31b-cloud", "exec"])
-            self.assertIn("--ephemeral", command)
-            self.assertEqual(command[command.index("--sandbox") + 1], sandbox)
+        self.assertEqual(luna[:4], ["codex", "--model", "gpt-6-luna", "exec"])
+        self.assertNotIn("--profile", luna)
+        self.assertIn("--ephemeral", luna)
+        self.assertEqual(luna[luna.index("--sandbox") + 1], "workspace-write")
+
+        self.assertEqual(gemma[:6], ["codex", "--profile", "ollama-launch", "--model", "gemma4:31b-cloud", "exec"])
+        self.assertIn("--ephemeral", gemma)
+        self.assertEqual(gemma[gemma.index("--sandbox") + 1], "read-only")
 
     def test_constructor_cannot_raise_round_or_retry_limits(self):
         with self.assertRaises(ValueError):
