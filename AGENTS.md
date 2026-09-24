@@ -45,3 +45,4 @@
 ## 架構文件入口
 
 - 開始處理專案架構或相關功能前，先閱讀 [`docs/README.md`](docs/README.md) 的文件索引，再依需求閱讀對應文件。
+- 開發者與 AI agent 在新增或修改前端、後端、API、資料庫及測試時，必須遵守[共同開發規範](docs/development-standards.md)及工作範圍對應的[前端規範](docs/frontend-development-standards.md)或[後端規範](docs/backend-development-standards.md)；跨前後端的工作須同時遵守兩份。本規範不取代本檔的 runner、reviewer、工作區保護及 Git 授權要求。
