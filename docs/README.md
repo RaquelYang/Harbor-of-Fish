@@ -1,0 +1,9 @@
+# Harbor of Fish 文件
+
+此索引提供專案文件入口。開始處理架構或相關功能前，先閱讀本頁，再依工作範圍查看對應文件。
+
+## 架構
+
+- [系統總覽](architecture/system-overview.md)：前後端責任、系統邊界、主要資料流、建議 monorepo 目錄及本機開發方式。
+- [API 與領域模型](architecture/api-and-domain.md)：公開查詢與管理端 API 方向、發布及存取界線、核心領域關係。
+- [架構決策](architecture/decisions.md)：目前採用的預設、未納入範圍及待決事項。

@@ -35,3 +35,7 @@
 
 - 一般實作需求在 Codex 完成計畫且工作區乾淨後，自動啟動 `.codex/orchestrator/run.py`。
 - 使用者明確要求只規劃或只檢查時，不啟動 runner。
+
+## 架構文件入口
+
+- 開始處理專案架構或相關功能前，先閱讀 [`docs/README.md`](docs/README.md) 的文件索引，再依需求閱讀對應文件。
