@@ -21,3 +21,11 @@ Harbor of Fish 致力於整理台灣漁港、常見魚類與漁業相關知識�
 ## 目前進度
 
 專案目前處於初期建置階段，將依上述方向逐步整理與補充內容。
+
+## 需求規格與 AI 協作
+
+GitHub Spec Kit 用於把需求整理成規格、技術計畫與任務清單。Codex skills 安裝完成後，建議依序使用 `$speckit-specify`、視需要使用 `$speckit-clarify`，再使用 `$speckit-plan` 與 `$speckit-tasks`；只有在專案規則經確認後才填寫 `$speckit-constitution`。此流程先產生規劃文件，不代表已開始實作產品功能。
+
+產品程式碼的一般實作仍依 [`AGENTS.md`](AGENTS.md) 的既有流程交由 `.codex/orchestrator/run.py` 執行：GPT-6 Luna implementer 負責實作，Gemma reviewer 以唯讀方式審查。Spec Kit 的規格、計畫與任務可作為該流程的輸入，不取代 runner 的實作與審查邊界。
+
+此 repository 已初始化 Spec Kit 的 Codex 整合，skills 位於 `.agents/skills/speckit-*`。可用 `specify integration status` 確認整合狀態；在專案目錄啟動新的 Codex 對話後，即可呼叫對應的 `$speckit-*` skill。

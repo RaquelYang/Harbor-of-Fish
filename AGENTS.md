@@ -36,6 +36,12 @@
 - 一般實作需求在 Codex 完成計畫且工作區乾淨後，自動啟動 `.codex/orchestrator/run.py`。
 - 使用者明確要求只規劃或只檢查時，不啟動 runner。
 
+## Spec Kit 與實作 runner 的分工
+
+- Spec Kit 用於先整理需求與規格，再建立技術計畫和任務；Codex skills 安裝完成後，可依序使用 `$speckit-specify`、`$speckit-clarify`（需要釐清時）、`$speckit-plan`、`$speckit-tasks`。`$speckit-constitution` 僅在專案規則經確認後才填寫，不可把範本預設內容當成本專案規則。
+- Spec Kit 產生的 spec、plan、tasks 是實作輸入與追蹤文件，不會取代一般程式碼需求的 runner 流程。依本文件的標準流程，由 runner 呼叫 GPT-6 Luna implementer 執行，並由 Gemma reviewer 唯讀審查；不要以 `$speckit-implement` 繞過這個流程。
+- Spec Kit skills 未安裝或 `specify integration status` 尚未辨識為 Codex 前，不要假設 `$speckit-*` 已可呼叫。安裝時使用 Spec Kit 官方 CLI；保留既有 `.agents/skills`、`.codex`、文件及產品檔案。
+
 ## 架構文件入口
 
 - 開始處理專案架構或相關功能前，先閱讀 [`docs/README.md`](docs/README.md) 的文件索引，再依需求閱讀對應文件。
