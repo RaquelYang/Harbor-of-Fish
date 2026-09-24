@@ -1,3 +1,0 @@
-# Project conversation planning defaults. Ollama CLI sessions are selected explicitly by the runner.
-model = "gpt-6-luna"
-model_reasoning_effort = "high"
