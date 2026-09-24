@@ -1,6 +1,6 @@
 # 後端開發規範
 
-本文件適用於規劃中的 Spring Boot 模組化單體及 PostgreSQL。開發者與 AI agent **必須**同時遵守[共同開發規範](development-standards.md)的 TDD、API 契約、資料語意及交付要求。管理端規則在後續管理功能實作時適用，不增加產品第一階段範圍。
+本文件適用於規劃中的 Spring Boot 模組化單體及 PostgreSQL。開發者與 AI agent **必須**同時遵守[共同開發規範](development-standards.md)的 TDD、API 契約、資料語意及交付要求。[八階段開發計畫](development-plan.md)的第一階段僅提供本機／測試資料 API；管理端規則只在未來另有管理需求時適用，不增加八階段交付範圍。
 
 ## 領域模組與分層
 

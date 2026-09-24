@@ -1,9 +1,11 @@
 <!--
 Sync Impact Report
-- Version change: template -> 1.0.0
-- Modified principles: five template principle placeholders -> I. 領域詞彙與資料可信度; II. 可觀察行為與小切片 TDD; III. 清楚的責任與適度抽象; IV. API 契約、安全與資料遷移; V. 手機優先與可操作的狀態
-- Added sections: Additional Constraints; Development Workflow
-- Removed sections: None (the two template section placeholders were replaced with named sections)
+- Version change: 1.0.0 -> 2.0.0
+- Modified principles: None; the five core principles remain unchanged
+- Modified constraints: the three-stage first-phase map requirement was replaced by the approved eight-stage delivery sequence; phase one is a local test-only skeleton, and first public release follows all eight internal acceptances
+- Added sections: None
+- Removed sections: None
+- Follow-up documents: docs/development-plan.md added; docs/README.md, docs/product-plan.md, docs/frontend-development-standards.md, docs/backend-development-standards.md, and docs/architecture/decisions.md synchronized
 - TODO: None
 -->
 # Harbor of Fish Constitution
@@ -56,7 +58,7 @@ Sync Impact Report
 - 目前技術方向為 Angular 21 前端、Spring Boot 模組化單體後端、PostgreSQL 與 Flyway；這些是架構預設，不代表前後端程式骨架已建立。
 - 前後端骨架、應用程式測試工具與測試、lint、build 命令尚未建立或實際確認。維護者只有在骨架及工具建立後，才能依實際驗證結果補列命令；不得將 orchestrator 命令宣稱為應用程式命令。
 - 部署平台、網域、CI/CD、正式環境拓樸、管理者認證提供者與管理角色細分等細節尚未定案，須待需求與環境明確後再決策並更新適用架構文件。
-- 功能階段 **MUST** 依[產品規劃](../../docs/product-plan.md)安排。第一階段以漁港地圖及基礎內容為範圍；不得提前納入管理介面或一般會員功能。後續階段依產品規劃與核定需求逐步展開。
+- 功能交付 **MUST** 依[八階段開發計畫](../../docs/development-plan.md)安排。第一階段僅建立可在本機重現的前後端與資料庫測試骨架，使用明確標示的固定測試資料；**MUST NOT** 提供地圖、真實漁港、魚種、漁季、價格或限制資料查詢，亦不得對外公開產品功能。後續階段依八階段計畫交付；全部階段完成內部驗收前 **MUST NOT** 首次公開網站。[產品規劃](../../docs/product-plan.md)描述產品方向，不取代八階段交付順序；管理介面及一般會員功能不因本次階段調整而納入。
 
 ## Development Workflow
 
@@ -72,4 +74,4 @@ Sync Impact Report
 - 規劃、實作及審查 **MUST** 檢查與本憲章的一致性；交付審查 **MUST** 指出不符合項目、適用例外及其驗證。發現不一致時，須修正提案或依上述程序修訂憲章，不得默默忽略原則。
 - [AGENTS.md](../../AGENTS.md) 所定操作流程與[共同開發規範](../../docs/development-standards.md)、[前端開發規範](../../docs/frontend-development-standards.md)、[後端開發規範](../../docs/backend-development-standards.md) 仍是具體執行細節的依據。本憲章定義治理原則，不擅自改寫上述文件；待決架構事項依[架構決策](../../docs/architecture/decisions.md)及相關架構文件更新。
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-24 | **Last Amended**: 2026-09-24
+**Version**: 2.0.0 | **Ratified**: 2026-09-24 | **Last Amended**: 2026-09-24
