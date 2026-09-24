@@ -1,0 +1,214 @@
+openapi: 3.1.0
+info:
+  title: Harbor of Fish Local Test Fixture API
+  version: 1.0.0
+  description: >-
+    第一階段 local/test only 的固定假資料讀取契約，不是公開產品 API。
+servers:
+  - url: http://localhost:8080
+    description: 僅限開發者本機；後端只在 local/test profile 啟用本契約
+tags:
+  - name: local-test
+    description: 本機測試 fixture；不得用產品或真實領域資料替換
+paths:
+  /api/v1/local-test/fixtures:
+    get:
+      tags: [local-test]
+      operationId: listLocalTestFixtures
+      summary: 讀取固定本機測試資料
+      responses:
+        '200':
+          description: 固定資料集（空集合仍保留測試用途 metadata）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixtureListResponse'
+              examples:
+                fixedDataset:
+                  value:
+                    data:
+                      - id: 00000000-0000-4000-8000-000000000001
+                        fixtureKey: sample-one
+                        title: 本機測試樣本一
+                        description: 僅供本機測試，非真實產品資料。
+                        datasetVersion: 1.0.0
+                        testOnly: true
+                    meta:
+                      testOnly: true
+                      datasetVersion: 1.0.0
+                      count: 1
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/v1/local-test/fixtures/{fixtureKey}:
+    get:
+      tags: [local-test]
+      operationId: getLocalTestFixture
+      summary: 依固定識別鍵讀取一筆測試資料
+      parameters:
+        - name: fixtureKey
+          in: path
+          required: true
+          description: 小寫英數及連字號組成的 fixture key。
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+            pattern: '^[a-z0-9][a-z0-9-]{0,63}$'
+      responses:
+        '200':
+          description: 找到的固定測試資料
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixtureResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  schemas:
+    Fixture:
+      type: object
+      additionalProperties: false
+      required: [id, fixtureKey, title, description, datasetVersion, testOnly]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fixtureKey:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^[a-z0-9][a-z0-9-]{0,63}$'
+        title:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          minLength: 1
+          maxLength: 500
+        datasetVersion:
+          type: string
+          pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'
+        testOnly:
+          type: boolean
+          const: true
+    FixtureListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Fixture'
+        meta:
+          $ref: '#/components/schemas/FixtureMetadata'
+    FixtureResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/Fixture'
+        meta:
+          $ref: '#/components/schemas/FixtureMetadata'
+    FixtureMetadata:
+      type: object
+      additionalProperties: false
+      required: [testOnly, datasetVersion, count]
+      properties:
+        testOnly:
+          type: boolean
+          const: true
+        datasetVersion:
+          type: string
+          pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'
+        count:
+          type: integer
+          minimum: 0
+          description: list 為回傳筆數；item 查詢為 1。
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, code, message]
+      properties:
+        field:
+          type: string
+        code:
+          type: string
+          description: 穩定機器識別碼，不含使用者敏感值。
+        message:
+          type: string
+          description: 繁體中文安全說明，不包含輸入值或內部例外。
+    Problem:
+      type: object
+      description: RFC 9457 Problem Details，擴充穩定錯誤碼與欄位錯誤。
+      required: [type, title, status, detail, instance, code]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri-reference
+        code:
+          type: string
+          examples: [INVALID_FIXTURE_KEY, FIXTURE_NOT_FOUND, INTERNAL_ERROR]
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FieldError'
+  responses:
+    BadRequest:
+      description: 請求路徑或欄位格式無效
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: about:blank
+            title: 請求資料格式錯誤
+            status: 400
+            detail: fixtureKey 格式不正確。
+            instance: /api/v1/local-test/fixtures/Bad_Key
+            code: INVALID_FIXTURE_KEY
+            errors:
+              - field: fixtureKey
+                code: PATTERN
+                message: 請使用小寫英數字與連字號。
+    NotFound:
+      description: 合法格式的識別鍵不存在
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: about:blank
+            title: 找不到測試資料
+            status: 404
+            detail: 指定的固定測試資料不存在。
+            instance: /api/v1/local-test/fixtures/not-present
+            code: FIXTURE_NOT_FOUND
+    InternalError:
+      description: 服務或資料庫發生錯誤；回應不得暴露內部資訊
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+          example:
+            type: about:blank
+            title: 服務暫時無法處理請求
+            status: 500
+            detail: 請稍後重試。
+            instance: /api/v1/local-test/fixtures
+            code: INTERNAL_ERROR
