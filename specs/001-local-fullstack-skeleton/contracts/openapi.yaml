@@ -5,7 +5,7 @@ info:
   description: >-
     第一階段 local/test only 的固定假資料讀取契約，不是公開產品 API。
 servers:
-  - url: http://localhost:8080
+  - url: http://127.0.0.1:8080
     description: 僅限開發者本機；後端只在 local/test profile 啟用本契約
 tags:
   - name: local-test

@@ -71,8 +71,8 @@ Loader 先檢查完整 JSON（恰三筆、欄位型別與必填、長度與 patt
 **待驗證候選命令**：
 
 ```sh
-curl --fail-with-body http://localhost:8080/api/v1/local-test/fixtures
-curl --fail-with-body http://localhost:8080/api/v1/local-test/fixtures/sample-one
+curl --fail-with-body http://127.0.0.1:8080/api/v1/local-test/fixtures
+curl --fail-with-body http://127.0.0.1:8080/api/v1/local-test/fixtures/sample-one
 npm --prefix frontend start
 ```
 

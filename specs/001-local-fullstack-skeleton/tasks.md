@@ -21,7 +21,7 @@
 - [ ] T005 [P] 在 `infra/compose.yaml` 建立 PostgreSQL 18.6 `postgres` service、專用 `harbor_local` 資料庫與 healthcheck；host port 只綁 `127.0.0.1:5432`，使用獨立 local volume。
 - [ ] T006 在 `infra/.env.example` 放入明確假值與 `APP_ENV=local`、`DB_HOST=127.0.0.1`、`DB_PORT=5432`、`DB_NAME=harbor_local`、`DB_USER=harbor_local`，並在根目錄 `.gitignore` 排除 `infra/.env.local` 與本機秘密。
 - [ ] T007 在 `frontend/eslint.config.js` 與 `backend/pom.xml` 設定前端 lint、後端 Checkstyle；不以尚未執行的命令宣稱規則已通過。
-- [ ] T008 在 `frontend/proxy.conf.json` 與 `frontend/angular.json` 設定開發期間只代理 `/api` 至本機 API；前端設定不得含資料庫連線或密碼。
+- [ ] T008 在 `frontend/proxy.conf.json` 與 `frontend/angular.json` 設定開發期間只將 `/api` 代理至 `http://127.0.0.1:8080`；前端設定不得含資料庫連線或密碼，驗收時須確認代理可連到 API 的實際 loopback 監聽位址。
 
 ## Phase 2: Foundational（阻擋所有故事的設定與測試底座）
 
@@ -54,7 +54,7 @@
 - [ ] T026 [US1] 先在 `frontend/src/app/features/local-test/local-test.page.spec.ts` 寫由 API 成功回傳三筆時，繁中頁面顯示固定測試提醒、三個標題與每筆測試標記的可見行為測試。
 - [ ] T027 [US1] 執行 `npm --prefix frontend test -- --watch=false --include=src/app/features/local-test/local-test.page.spec.ts` 選取對應測試並確認因頁面行為缺失而有效紅燈；記錄實際選取數與失敗原因，命令尚未實測前維持待驗證。
 - [ ] T028 [US1] 在 `frontend/src/app/features/local-test/local-test.page.ts` 與 `.html` 實作測試頁，固定顯示「僅供本機測試，非真實漁港、魚種、漁季、價格或限制資料」，以頁面持有狀態讀取 typed client、顯示三筆資料；窄螢幕可讀且標籤清楚，以 `npm --prefix frontend test -- --watch=false --include=src/app/features/local-test/local-test.page.spec.ts` 重跑 T026 轉綠。
-- [ ] T029 [US1] 僅在 T019-T022 的完整來源驗證、未知欄拒絕、先驗證整檔再單交易寫入測試與實作均通過後，才在 `frontend/src/app/app.routes.ts` 接上測試頁並依 `specs/001-local-fullstack-skeleton/quickstart.md` 的待驗證流程以全新本機 DB 驗證「DB → Flyway → local API → loader → Angular 頁面」；記錄首次結果與重啟後三筆 API 可見欄位逐欄相同於 `README.md`，前置項目或流程失敗時維持待驗證。
+- [ ] T029 [US1] 僅在 T019-T022 的完整來源驗證、未知欄拒絕、先驗證整檔再單交易寫入測試與實作均通過後，才在 `frontend/src/app/app.routes.ts` 接上測試頁並依 `specs/001-local-fullstack-skeleton/quickstart.md` 的待驗證流程以全新本機 DB 驗證「DB → Flyway → local API → loader → Angular 頁面」；停止並重新啟動 API 與前端後，重新開啟測試頁，同時比對列表 API 與頁面顯示的三筆資料、全部可見欄位及測試標記；將首次與重啟後的實際觀察記錄於 `README.md`。任一前置項目或瀏覽器流程失敗時，US1 維持未完成及待驗證。
 
 ## Phase 4: US2 重複載入並安全重設測試資料（P2）
 
@@ -93,11 +93,11 @@
 - [ ] T051 [US3] 先在 `frontend/src/app/core/api/local-test-fixtures.api.spec.ts` 加入網路錯誤、非成功 HTTP 與 RFC 9457 Problem Details 的 client 可觀察結果測試。
 - [ ] T052 [US3] 執行 `npm --prefix frontend test -- --watch=false --include=src/app/core/api/local-test-fixtures.api.spec.ts` 新增案例，確認因錯誤映射缺失而有效紅燈；記錄實際選取數及失敗原因，命令尚未實測前維持待驗證。
 - [ ] T053 [US3] 在 `frontend/src/app/core/api/local-test-fixtures.api.ts` 完成錯誤映射，不把失敗轉成假成功 fixture 或空集合；以 `npm --prefix frontend test -- --watch=false --include=src/app/core/api/local-test-fixtures.api.spec.ts` 重跑 T051 轉綠。
-- [ ] T054 [US3] 先在 `frontend/src/app/features/local-test/local-test.page.spec.ts` 加入 loading、空集合、API 不可用／失敗、重試恢復、每種狀態固定測試提醒及鍵盤可操作的使用者可見測試。
+- [ ] T054 [US3] 先在 `frontend/src/app/features/local-test/local-test.page.spec.ts` 加入 loading、空集合、API 不可用／失敗、重試恢復、每種狀態固定測試提醒及鍵盤可操作的使用者可見測試。測試須驗證使用者可用 Tab 移至重試控制，並以鍵盤觸發重試；可見焦點樣式留待瀏覽器驗收確認。
 - [ ] T055 [US3] 執行 `npm --prefix frontend test -- --watch=false --include=src/app/features/local-test/local-test.page.spec.ts` 新增案例，確認因缺少狀態／重試行為而有效紅燈；記錄實際選取數及失敗原因，命令尚未實測前維持待驗證。
-- [ ] T056 [US3] 在 `frontend/src/app/features/local-test/local-test.page.ts` 與 `.html` 實作頁面擁有的 `loading | success | empty | error` 狀態與重試，失敗時清除舊成功資料、顯示易懂訊息，所有狀態保留固定「僅供測試」提醒；以 `npm --prefix frontend test -- --watch=false --include=src/app/features/local-test/local-test.page.spec.ts` 重跑 T054 轉綠。
+- [ ] T056 [US3] 在 `frontend/src/app/features/local-test/local-test.page.ts` 與 `.html` 實作頁面擁有的 `loading | success | empty | error` 狀態與重試，失敗時清除舊成功資料、顯示易懂訊息，所有狀態保留固定「僅供測試」提醒；以 `npm --prefix frontend test -- --watch=false --include=src/app/features/local-test/local-test.page.spec.ts` 重跑 T054 轉綠。重試控制使用原生按鈕，保留或提供清楚可辨識的 `:focus-visible` 樣式。
 - [ ] T057 [US3] 在 `scripts/smoke-local.sh` 與 `scripts/smoke-local.ps1` 建立 local-only 冒煙入口，檢查 `/api/v1/local-test/fixtures` 三筆、單筆路徑、`testOnly`、版本與欄位內容；兩入口只呼叫同一 API 並檢查 HTTP 位址確為 loopback，不以 `localhost` URL 推斷網路監聽綁定；以 T016、T045 契約測試作為先行依據，實際執行與結果留待 T058，不以 curl 成功取代前端畫面驗收。
-- [ ] T058 [US3] 依 `specs/001-local-fullstack-skeleton/quickstart.md` 實際核對並執行前端 test/lint/build、`./mvnw -f backend/pom.xml verify`、Checkstyle、OpenAPI 3.1 契約、空白 DB Flyway 啟動與本機 HTTP 冒煙。OpenAPI 檢查須執行可解析 `contracts/openapi.yaml` 的 3.1 parser/validator，並以 `FixtureListContractTest`、`FixtureItemContractTest`、`FixtureErrorAndProfileTest` 實際請求兩條路徑，逐項比對成功與錯誤狀態碼、回應 content type、必要欄位與 schema（含 list/item envelope 及 Problem Details）；執行命令至少包含 `./mvnw -f backend/pom.xml -Dtest=FixtureListContractTest,FixtureItemContractTest,FixtureErrorAndProfileTest test` 與 `./mvnw -f backend/pom.xml verify`，單純 curl 得到 200 不構成契約驗證。查核 Surefire 與 Failsafe 報告檔，記錄 `*IT.java` 實際執行測試名稱/數量及成功失敗數；Maven 命令成功但報告未證明 IT 有執行，不得宣稱 SC-003。另以作業系統 socket/process 實際檢查 API 監聽位址為 `127.0.0.1` 或等價 loopback，將檢查命令與觀察到的綁定位址記錄於 `README.md`，不得以 profile 名稱或 `localhost` URL 代替。每項均在 `README.md` 記錄執行目錄、必要服務、版本、實際命令、報告位置、測試數與結果，未成功者保留「待驗證」。
+- [ ] T058 [US3] 依 `specs/001-local-fullstack-skeleton/quickstart.md` 實際核對並執行前端 test/lint/build、`./mvnw -f backend/pom.xml verify`、Checkstyle、OpenAPI 3.1 契約、空白 DB Flyway 啟動與本機 HTTP 冒煙。OpenAPI 檢查須執行可解析 `contracts/openapi.yaml` 的 3.1 parser/validator，並以 `FixtureListContractTest`、`FixtureItemContractTest`、`FixtureErrorAndProfileTest` 實際請求兩條路徑，逐項比對成功與錯誤狀態碼、回應 content type、必要欄位與 schema（含 list/item envelope 及 Problem Details）；執行命令至少包含 `./mvnw -f backend/pom.xml -Dtest=FixtureListContractTest,FixtureItemContractTest,FixtureErrorAndProfileTest test` 與 `./mvnw -f backend/pom.xml verify`，單純 curl 得到 200 不構成契約驗證。查核 Surefire 與 Failsafe 報告檔，記錄 `*IT.java` 實際執行測試名稱/數量及成功失敗數；Maven 命令成功但報告未證明 IT 有執行，不得宣稱 SC-003。另以作業系統 socket/process 實際檢查 API 監聽位址為 `127.0.0.1` 或等價 loopback，將檢查命令與觀察到的綁定位址記錄於 `README.md`，不得以 profile 名稱或 `localhost` URL 代替。每項均在 `README.md` 記錄執行目錄、必要服務、版本、實際命令、報告位置、測試數與結果，未成功者保留「待驗證」。US3 完成前，須在瀏覽器分別觀察載入、三筆成功、空集合、API 失敗與重試恢復，確認失敗時不顯示舊成功資料，並記錄結果；僅有元件測試或 HTTP 冒煙通過不得標記 US3 完成。
 
 ## Phase 6: Cross-cutting polish 與第一階段內部驗收
 
@@ -105,7 +105,7 @@
 
 - [ ] T059 在 `README.md` 依實際結果記錄 Node/Java/Docker/PostgreSQL 版本、安裝與啟動順序、`infra/.env.local` 假值範例用法、DB 與 API 的實際 loopback 監聽位址及檢查命令，並核對 `specs/001-local-fullstack-skeleton/quickstart.md` 的候選命令；在 Windows PowerShell 實測適用的 Node/Java/Docker 先決條件安裝或版本檢查、Maven Wrapper 首次下載/啟動、測試、載入、清除拒絕與允許、冒煙及完整驗收命令，確認其使用相同來源驗證與 reset guards；逐項記錄實際命令和結果。若無 Windows 環境或任何命令未實際執行，清楚標「待驗證」，不可宣稱 Windows/跨平台已驗收；只將實際成功者標已驗證。
 - [ ] T060 在 `README.md` 記錄全新專用 DB 的完整驗收：Flyway history、載入兩次逐欄一致、清除拒絕矩陣與允許清除、重新載入，以及 local/test 外路由／loader/reset 不可用的實際結果。
-- [ ] T061 在 `README.md` 記錄繁中測試頁的瀏覽器驗收：窄螢幕、鍵盤、載入／三筆成功／空集合／API 失敗／重試、瀏覽器只呼叫 API 而不連資料庫；無實際觀察的項目保留待驗證。
+- [ ] T061 在 `README.md` 記錄繁中測試頁的瀏覽器驗收：窄螢幕、鍵盤、**重試控制的可見焦點**、載入／三筆成功／空集合／API 失敗／重試、瀏覽器只呼叫 API 而不連資料庫；無實際觀察的項目保留待驗證。
 - [ ] T062 在 `README.md` 記錄停止並重啟 API 與前端後，列表與畫面再次顯示相同三筆、全部欄位及標記一致的結果；若任何命令或重啟情境受環境限制，明列限制，不能宣稱 SC-006 或第一階段完整通過。
 - [ ] T063 核對 `backend/src/main/resources/local-test-fixtures.v1.json`、`infra/.env.example`、`frontend/src/app/features/local-test/local-test.page.html` 與 `README.md`：只有中性假資料與明確測試標記，沒有真實領域資料、地圖／管理／公開入口、個資、秘密或未授權來源內容。
 - [ ] T064 依 `specs/001-local-fullstack-skeleton/spec.md` 的 FR-001～FR-016、SC-001～SC-006 與 `docs/development-plan.md` 第一階段逐項比對 `README.md` 的實際證據；未驗證項目維持未完成，不安排第二至八階段功能或首次公開。
