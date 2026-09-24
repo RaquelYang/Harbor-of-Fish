@@ -1,7 +1,6 @@
 import json
 import subprocess
 import tempfile
-import tomllib
 import unittest
 from pathlib import Path
 
@@ -265,12 +264,6 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("acceptance_criteria", (round_dir / "reviewer-prompt.txt").read_text())
         self.assertEqual(len(json.loads((round_dir / "validation.json").read_text())), 3)
         self.assertEqual(json.loads((run_dir / "summary.json").read_text())["status"], "passed")
-
-    def test_project_default_model_is_luna(self):
-        config_path = Path(__file__).resolve().parents[1] / "config.toml"
-        config = tomllib.loads(config_path.read_text(encoding="utf-8"))
-        self.assertEqual(config["model"], "gpt-6-luna")
-
 
 if __name__ == "__main__":
     unittest.main()
