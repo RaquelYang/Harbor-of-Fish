@@ -38,9 +38,9 @@
 
 **Independent Test**: 在獨立空白 PostgreSQL 18 上啟動 local API，先驗證完整來源拒絕矩陣及無效檔零寫入，再載入三筆 canonical 來源、呼叫列表並打開測試頁；確認三筆固定欄位、資料與 metadata 的 `testOnly=true`，重啟 API／前端後逐欄相同。US2 另驗收相同來源冪等 upsert 與 reset guards。
 
-- [ ] T013 [US1] 先在 `backend/src/test/java/org/harboroffish/localtest/fixture/FlywayMigrationIT.java` 寫空白 PostgreSQL 啟動會套用 V1、建立 `local_test_fixture` 與 schema history，以及失敗遷移不得就緒的測試。
-- [ ] T014 [US1] 以 `./mvnw -f backend/pom.xml -Dit.test=FlywayMigrationIT verify` 選取並執行 T013，確認缺遷移案例有效紅燈；先排除阻擋 Surefire 的其他失敗，並確認 Failsafe `integration-test`/`verify` 報告列出該測試及執行數，記錄實際命令、報告位置與結果於實作紀錄（尚未實測前維持待驗證）。
-- [ ] T015 [US1] 在 `backend/src/main/resources/db/migration/V1__create_local_test_fixture.sql` 建表：`id uuid` 主鍵、唯一 `fixture_key varchar(64)`、`title varchar(100)`、`description varchar(500)`、`dataset_version varchar(16)`、`test_only boolean`；加入 NOT NULL、key/version pattern、非空文字與 `test_only=true` CHECK，不插入 fixture rows；以 `./mvnw -f backend/pom.xml -Dit.test=FlywayMigrationIT verify` 重跑 T013 轉綠。
+- [ ] T013 [US1] 先在 `backend/src/test/java/org/harboroffish/localtest/fixture/FlywayMigrationIT.java` 寫真實 PostgreSQL 測試：空白 DB 套用 V1 並建立 `local_test_fixture` 及正確 schema history；逐項以實際違規 INSERT 驗證必要欄位 NOT NULL、UUID/key 唯一、key/version pattern、非空文字、長度及 `test_only=true` 限制會拒絕非法列；並驗證遷移失敗時應用不得就緒。這組必要 V1 限制測試必須先於 T029 首次端到端驗收及本機 DB 首次套用 V1 完成。
+- [ ] T014 [US1] 以 `./mvnw -f backend/pom.xml -Dit.test=FlywayMigrationIT verify` 選取並執行 T013，先確認 V1/必要限制尚不存在時，PostgreSQL 整合測試因預期缺失而有效紅燈；排除阻擋 Surefire 的其他失敗，並由 Failsafe `integration-test`/`verify` 報告確認實際測試名稱、執行數及失敗原因是預期 schema/限制行為（編譯、設定或環境錯誤不算紅燈）。記錄命令、報告位置與結果於實作紀錄；尚未實測前維持待驗證。
+- [ ] T015 [US1] 在 `backend/src/main/resources/db/migration/V1__create_local_test_fixture.sql` 建表：`id uuid` 主鍵、唯一 `fixture_key varchar(64)`、`title varchar(100)`、`description varchar(500)`、`dataset_version varchar(16)`、`test_only boolean`；加入 NOT NULL、key/version pattern、非空文字、長度與 `test_only=true` CHECK，不插入 fixture rows；以 `./mvnw -f backend/pom.xml -Dit.test=FlywayMigrationIT verify` 重跑 T013，確認相同 PostgreSQL 限制案例轉綠。此驗證在 T029 前完成後，V1 即視為已套用遷移，不得於其後原地修改。
 - [ ] T016 [US1] 先在 `backend/src/test/java/org/harboroffish/localtest/api/FixtureListContractTest.java` 寫載入前 `GET /api/v1/local-test/fixtures` 回 200、`application/json`、`data=[]`、`meta.testOnly=true`、`meta.datasetVersion=1.0.0`、`meta.count=0` 的 HTTP 契約測試；測試須解析 `contracts/openapi.yaml` 為 OpenAPI 3.1，依 schema 核對路徑成功回應的狀態碼、content type、必要欄位、型別及 envelope 欄位。
 - [ ] T017 [US1] 執行 `./mvnw -f backend/pom.xml -Dtest=FixtureListContractTest test` 並確認因列表行為未實作而有效紅燈；記錄實際選取的測試數與失敗原因，編譯或環境失敗不算有效紅燈，命令尚未實測前維持待驗證。
 - [ ] T018 [US1] 在 `backend/src/main/java/org/harboroffish/localtest/fixture/LocalTestFixtureRepository.java`、`application/ListLocalTestFixtures.java`、`api/LocalTestFixtureController.java` 與 `api/FixtureResponse.java` 實作唯讀列表與分離 DTO，僅 local/test profile 註冊路由；依 OpenAPI 回 `data`/`meta`，以 `./mvnw -f backend/pom.xml -Dtest=FixtureListContractTest test` 重跑 T016 轉綠。
@@ -54,7 +54,7 @@
 - [ ] T026 [US1] 先在 `frontend/src/app/features/local-test/local-test.page.spec.ts` 寫由 API 成功回傳三筆時，繁中頁面顯示固定測試提醒、三個標題與每筆測試標記的可見行為測試。
 - [ ] T027 [US1] 執行 `npm --prefix frontend test -- --watch=false --include=src/app/features/local-test/local-test.page.spec.ts` 選取對應測試並確認因頁面行為缺失而有效紅燈；記錄實際選取數與失敗原因，命令尚未實測前維持待驗證。
 - [ ] T028 [US1] 在 `frontend/src/app/features/local-test/local-test.page.ts` 與 `.html` 實作測試頁，固定顯示「僅供本機測試，非真實漁港、魚種、漁季、價格或限制資料」，以頁面持有狀態讀取 typed client、顯示三筆資料；窄螢幕可讀且標籤清楚，以 `npm --prefix frontend test -- --watch=false --include=src/app/features/local-test/local-test.page.spec.ts` 重跑 T026 轉綠。
-- [ ] T029 [US1] 僅在 T019-T022 的完整來源驗證、未知欄拒絕、先驗證整檔再單交易寫入測試與實作均通過後，才在 `frontend/src/app/app.routes.ts` 接上測試頁並依 `specs/001-local-fullstack-skeleton/quickstart.md` 的待驗證流程以全新本機 DB 驗證「DB → Flyway → local API → loader → Angular 頁面」；停止並重新啟動 API 與前端後，重新開啟測試頁，同時比對列表 API 與頁面顯示的三筆資料、全部可見欄位及測試標記；將首次與重啟後的實際觀察記錄於 `README.md`。任一前置項目或瀏覽器流程失敗時，US1 維持未完成及待驗證。
+- [ ] T029 [US1] 僅在 T013-T015 的 PostgreSQL V1 schema/必要限制測試已完成有效紅燈與綠燈，且 T019-T022 的完整來源驗證、未知欄拒絕、先驗證整檔再單交易寫入測試與實作均通過後，才首次套用 V1 至專用全新本機 DB；再於 `frontend/src/app/app.routes.ts` 接上測試頁並依 `specs/001-local-fullstack-skeleton/quickstart.md` 的待驗證流程驗證「DB → Flyway → local API → loader → Angular 頁面」。停止並重新啟動 API 與前端後，重新開啟測試頁，比對列表 API 與頁面顯示的三筆資料、全部可見欄位及測試標記，將首次與重啟後的實際觀察記錄於 `README.md`。任一前置項目或瀏覽器流程失敗時，US1 維持未完成及待驗證。
 
 ## Phase 4: US2 重複載入並安全重設測試資料（P2）
 
@@ -62,14 +62,14 @@
 
 **Independent Test**: 連續載入兩次比較三筆所有 API 可見欄位；缺欄、錯型別、未知欄、重複 ID/key、版本不一致、`testOnly=false` 均拒絕且零部分寫入；拒絕條件下清除命令非零退出且資料不變，通過條件下僅測試 rows 被清除並可重載。
 
-- [ ] T030 [US2] 擴充 `backend/src/test/java/org/harboroffish/localtest/fixture/FixtureSourceValidationTest.java` 的資料驅動回歸矩陣，依 [data-model.md](data-model.md) 精確欄位、trim 規則、長度及 pattern 覆蓋缺欄、未知欄、錯型別、空白/超長值、非法 key/version、重複 UUID/key、版本不一致、非三筆及 `testOnly=false`；這些 T019 已涵蓋的驗證不得假設在 US2 再次故意失敗。
+- [ ] T030 [US2] 新建 `backend/src/test/java/org/harboroffish/localtest/fixture/FixtureSourceValidationTest.java` 作為獨立回歸矩陣，以資料驅動案例依 [data-model.md](data-model.md) 精確欄位、trim 規則、長度及 pattern 覆蓋缺欄、未知欄、錯型別、空白/超長值、非法 key/version、重複 UUID/key、版本不一致、非三筆及 `testOnly=false`；這些 T019 已涵蓋的驗證不得假設在 US2 再次故意失敗。
 - [ ] T031 [US2] 執行 `./mvnw -f backend/pom.xml -Dtest=FixtureSourceValidationTest test` 及 `./mvnw -f backend/pom.xml -Dit.test=FixtureLoadIT verify`，確認 T030 完整回歸矩陣與 T019 PostgreSQL 驗證/原子載入測試通過；記錄 Surefire/Failsafe 實際選取數及結果，尚未實測前維持待驗證。只有新增回歸案例揭露缺陷才修正，不能把已在 US1 完成的驗證功能當成本切片必須再次紅燈的行為。
 - [ ] T032 [US2] 檢查 `FixtureSourceValidator.java` 的規則與整檔驗證先於交易之邊界，修正 T030/T031 實際揭露的回歸缺陷並重跑回歸測試；若無缺陷，只記錄通過證據，不重複安排或假設首次驗證功能尚未實作。US2 後續工作專注於下列載入冪等性與清除 guards。
 - [ ] T033 [US2] 先在 `backend/src/test/java/org/harboroffish/localtest/fixture/FixtureLoadIT.java` 加入無效檔零部分寫入、相同來源載入兩次無重複、來源 canonical 值覆寫既有相同 `fixtureKey` 與全部欄位比對案例。
 - [ ] T034 [US2] 執行 `./mvnw -f backend/pom.xml -Dit.test=FixtureLoadIT verify` 選取新增整合案例，確認因冪等／canonical upsert 語意缺失而有效紅燈；不得將 US1 已完成且通過的完整來源驗證或原子寫入當成此處必須再紅燈的原因。記錄實際 Failsafe 報告、選取數與結果，命令尚未實測前維持待驗證。
 - [ ] T035 [US2] 在 `backend/src/main/java/org/harboroffish/localtest/application/LoadLocalTestFixtures.java` 與 `fixture/LocalTestFixtureRepository.java` 完成以 `fixture_key` 唯一鍵的單交易 `INSERT ... ON CONFLICT DO UPDATE`，對齊固定 `id/title/description/dataset_version/test_only`，提交前確認恰三筆與來源逐欄相等；以 `./mvnw -f backend/pom.xml -Dit.test=FixtureLoadIT verify` 重跑 T033 轉綠。
-- [ ] T036 [US2] 先在 `backend/src/test/java/org/harboroffish/localtest/fixture/LocalFixtureConstraintsIT.java` 寫 PostgreSQL 真實持久化測試，驗證 UUID/key 唯一、必要欄位、key/version pattern、非空文字與 `test_only=true` 限制確實拒絕非法列。
-- [ ] T037 [US2] 執行 `./mvnw -f backend/pom.xml -Dit.test=LocalFixtureConstraintsIT verify`；若發現預期限制失敗，僅在 `backend/src/main/resources/db/migration/V1__create_local_test_fixture.sql` 修正尚未發布的初始 V1，直到 T036 轉綠；記錄 Failsafe 報告、實際執行數與結果，尚未實測前維持待驗證。
+- [ ] T036 [US2] 先在 `backend/src/test/java/org/harboroffish/localtest/fixture/LocalFixtureConstraintsIT.java` 寫較完整的 PostgreSQL 真實持久化回歸矩陣，驗證 UUID/key 唯一、必要欄位、key/version pattern、非空文字、長度與 `test_only=true` 限制確實拒絕非法列；與 T013-T015 已完成的 V1 基線測試分工清楚，不把已套用 V1 當成可修改的初始遷移。
+- [ ] T037 [US2] 執行 `./mvnw -f backend/pom.xml -Dit.test=LocalFixtureConstraintsIT verify` 回歸 T036；Failsafe 報告須記錄實際執行數與結果，命令尚未實測前維持待驗證。若發現 V1 限制缺口，不得修改已套用的 `V1__create_local_test_fixture.sql`，須新增有序 `V2__...sql`，並以 PostgreSQL 驗證：(1) 已套用 V1 的專用本機 DB 升級至 V2 並保留既有資料及 Flyway history；(2) 全新 DB 依序 V1→V2 後具備相同限制。不得清除或重建 DB 來掩蓋或修正升級問題。若沒有缺口，只記錄 V1 完整矩陣回歸通過，不新增空遷移。
 - [ ] T038 [US2] 先在 `backend/src/test/java/org/harboroffish/localtest/application/ResetLocalFixtureIT.java` 寫清除拒絕矩陣：缺少或非 `APP_ENV=local`、缺少或非 `RESET_LOCAL_TEST_DATA=YES`、缺 `--confirm-local-fixture-delete`、host 非 `127.0.0.1`、port 非 `5432`、DB 名或登入 user 非 `harbor_local`、實際 `current_database()` 不符、URL/環境解析失敗或連線失敗，全部須在 DELETE 前非零退出且資料未變。
 - [ ] T039 [US2] 以 `./mvnw -f backend/pom.xml -Dit.test=ResetLocalFixtureIT verify` 選取 T038 拒絕案例，確認缺少 fail-closed 保護時有效紅燈；記錄 Failsafe 報告、實際執行數及失敗原因，命令尚未實測前維持待驗證。
 - [ ] T040 [US2] 在 `scripts/reset-local-test-data.sh`、`scripts/reset-local-test-data.ps1` 與 `backend/src/main/java/org/harboroffish/localtest/application/ResetLocalTestFixtures.java` 建立明確確認旗標及雙重防護：POSIX/PowerShell 入口與後端均檢查相同 env、JDBC host/port/database/user 及連線後 `current_database()`；任何缺漏、不符或解析失敗先退出，禁止 Flyway clean、DROP DATABASE 或通用清空；PowerShell 只呼叫同一受保護後端流程，不可略過 guards；以 `./mvnw -f backend/pom.xml -Dit.test=ResetLocalFixtureIT verify` 重跑 T038 轉綠。
@@ -103,18 +103,18 @@
 
 **目標**: 核對範圍、文件與完整重現證據；不得把本階段驗收當作首次公開。
 
-- [ ] T059 在 `README.md` 依實際結果記錄 Node/Java/Docker/PostgreSQL 版本、安裝與啟動順序、`infra/.env.local` 假值範例用法、DB 與 API 的實際 loopback 監聽位址及檢查命令，並核對 `specs/001-local-fullstack-skeleton/quickstart.md` 的候選命令；在 Windows PowerShell 實測適用的 Node/Java/Docker 先決條件安裝或版本檢查、Maven Wrapper 首次下載/啟動、測試、載入、清除拒絕與允許、冒煙及完整驗收命令，確認其使用相同來源驗證與 reset guards；逐項記錄實際命令和結果。若無 Windows 環境或任何命令未實際執行，清楚標「待驗證」，不可宣稱 Windows/跨平台已驗收；只將實際成功者標已驗證。
+- [ ] T059 在 `README.md` 明確記錄本次完整驗收所選的單一目標 OS，並依該 OS 實際結果記錄 Node/Java/Docker/PostgreSQL 版本、安裝與啟動順序、`infra/.env.local` 假值範例用法、DB 與 API 的實際 loopback 監聽位址及檢查命令；核對 `specs/001-local-fullstack-skeleton/quickstart.md` 的候選命令。逐條執行該目標 OS 適用的先決條件檢查、Maven Wrapper 首次下載/啟動、測試、載入、清除拒絕與允許、冒煙及完整驗收命令，記錄實際命令和結果。macOS、Linux、Windows 中其他未實測 OS 須逐一記為「待驗證」，不得宣稱跨平台已驗收；只將實際成功者標已驗證，未實際執行的 quickstart 候選命令保持「待驗證」。
 - [ ] T060 在 `README.md` 記錄全新專用 DB 的完整驗收：Flyway history、載入兩次逐欄一致、清除拒絕矩陣與允許清除、重新載入，以及 local/test 外路由／loader/reset 不可用的實際結果。
 - [ ] T061 在 `README.md` 記錄繁中測試頁的瀏覽器驗收：窄螢幕、鍵盤、**重試控制的可見焦點**、載入／三筆成功／空集合／API 失敗／重試、瀏覽器只呼叫 API 而不連資料庫；無實際觀察的項目保留待驗證。
 - [ ] T062 在 `README.md` 記錄停止並重啟 API 與前端後，列表與畫面再次顯示相同三筆、全部欄位及標記一致的結果；若任何命令或重啟情境受環境限制，明列限制，不能宣稱 SC-006 或第一階段完整通過。
 - [ ] T063 核對 `backend/src/main/resources/local-test-fixtures.v1.json`、`infra/.env.example`、`frontend/src/app/features/local-test/local-test.page.html` 與 `README.md`：只有中性假資料與明確測試標記，沒有真實領域資料、地圖／管理／公開入口、個資、秘密或未授權來源內容。
-- [ ] T064 依 `specs/001-local-fullstack-skeleton/spec.md` 的 FR-001～FR-016、SC-001～SC-006 與 `docs/development-plan.md` 第一階段逐項比對 `README.md` 的實際證據；未驗證項目維持未完成，不安排第二至八階段功能或首次公開。
+- [ ] T064 依 `specs/001-local-fullstack-skeleton/spec.md` 的 FR-001～FR-016、SC-001～SC-006 與 `docs/development-plan.md` 第一階段逐項比對 `README.md` 的實際證據；只有在本次明確記錄的單一目標 OS 本機基線命令全數實際成功時，才能判定該 OS 的第一階段完整驗收完成。macOS、Linux、Windows 其餘未實測平台逐一標為「待驗證」，不得宣稱跨平台已驗收，且不因此否定已實測目標 OS 的階段結果。未驗證項目維持未完成，不安排第二至八階段功能或首次公開；候選命令不得記為已驗證。
 
 ## Dependencies & Execution Order
 
 - **Setup → Foundational → US1 → US2 → US3 → Cross-cutting polish**。US1 先建立可觀察的端到端往返，US2 在同一 fixture 上加強載入與清除，US3 完成錯誤與各端驗收；不得把後續故事的未完成測試算作前一故事已通過。
-- **每個 TDD/回歸切片**：US1 為 T013→T014→T015、T016→T017→T018、T019→T020→T021→T022、T023→T024→T025、T026→T027→T028；一般 `*Test.java` 使用 Surefire 的 `-Dtest=<測試類> test` 選擇器，`*IT.java` 使用 Failsafe 的 `-Dit.test=<測試類> verify` 選擇器；IT 的有效紅綠須由 Failsafe 報告及實際執行數佐證，避免把編譯/環境錯誤當紅燈。US2 的 T030→T031→T032 是 US1 完整驗證功能的綠燈回歸檢查，不要求相同行為再次紅燈；T033→T034→T035 專注載入冪等性/canonical upsert，T038→T039→T040、T041→T042→T043 為 reset 拒絕及允許清除切片，T036→T037 為 V1 限制回歸檢查；US3 為 T045→T046→T047、T048→T049→T050、T051→T052→T053、T054→T055→T056。每個新增行為切片依紅燈、最小實作、綠燈；已完成行為的回歸切片記錄實際通過結果。
-- **資料順序**：空白 DB → V1 migration/validate → local API 啟動 → 完整 JSON 驗證 → 單交易載入 → API／頁面讀取。清除只在全部 allow-list 條件通過後執行，保留 schema 與 Flyway history。
+- **每個 TDD/回歸切片**：US1 為 T013→T014→T015、T016→T017→T018、T019→T020→T021→T022、T023→T024→T025、T026→T027→T028；T013-T015 的 PostgreSQL V1 必要限制紅綠循環必須在 T029 首次套用 V1／端到端驗收之前完成。一般 `*Test.java` 使用 Surefire 的 `-Dtest=<測試類> test` 選擇器，`*IT.java` 使用 Failsafe 的 `-Dit.test=<測試類> verify` 選擇器；IT 的有效紅綠須由 Failsafe 報告及實際執行數佐證，避免把編譯/環境錯誤當紅燈。US2 的 T030→T031→T032 是新建 `FixtureSourceValidationTest.java` 的 US1 完整驗證回歸檢查，不要求相同行為再次紅燈；T031 維持 Surefire `-Dtest=FixtureSourceValidationTest test` 與 Failsafe `-Dit.test=FixtureLoadIT verify` 選擇器。T033→T034→T035 專注載入冪等性/canonical upsert，T038→T039→T040、T041→T042→T043 為 reset 拒絕及允許清除切片，T036→T037 為 V1 限制完整回歸；若揭露限制缺口，新增有序 V2 並驗證既有專用 DB 與全新 DB 的 V1→V2 路徑，不修改已套用 V1、不清除或重建 DB。US3 為 T045→T046→T047、T048→T049→T050、T051→T052→T053、T054→T055→T056。每個新增行為切片依紅燈、最小實作、綠燈；已完成行為的回歸切片記錄實際通過結果。
+- **資料順序**：T013-T015 先在 PostgreSQL 驗證 V1 必要限制的紅綠 → T029 首次端到端驗收才對專用全新本機 DB 套用 V1 → local API 啟動 → 完整 JSON 驗證 → 單交易載入 → API／頁面讀取。後續 V1 限制回歸只讀驗證；缺口以 V2 升級既有 DB 與全新 DB，不清除或重建資料庫。清除只在全部 allow-list 條件通過後執行，保留 schema 與 Flyway history。
 - **首次載入前置**：T019/T020/T022 在任何 US1 首次端到端寫入前完成並證明整份 fixture 通過完整 schema/欄位/型別/trim/長度/pattern/筆數/唯一性/版本/標記驗證；完整驗證成功後才允許一筆交易寫入。US2 不重複把這項既有行為列作預期紅燈，僅作綠燈回歸；其新增紅燈留給冪等 upsert 與 reset guards。
 - **故事完成點**：US1 見 T029；US2 見 T044；US3 見 T058。T059～T064 是第一階段完整驗收，依所有三個故事完成後才執行。
 

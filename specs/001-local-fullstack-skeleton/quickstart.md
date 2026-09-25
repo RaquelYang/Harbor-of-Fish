@@ -2,6 +2,8 @@
 
 本文件定義骨架完成後應可重現的驗收順序。**以下全是計畫中的候選命令，尚未在實際骨架執行，狀態均為「待驗證」，目前不可視為已可用的專案指令。**實作後須依產生的 wrapper、script、service 和實際輸出修訂命令，逐條成功執行後才可標為已驗證並寫入 README 或端別規範。版本決策見 [research.md](research.md)，資料和契約見 [data-model.md](data-model.md) 與 [contracts/openapi.yaml](contracts/openapi.yaml)。
 
+T029 首次以本機 DB 驗收前，必須先完成 T013-T015 的 PostgreSQL V1 schema 與必要限制測試，並記錄有效紅燈及綠燈證據。V1 一旦套用即不可原地修改；若後續 T036-T037 回歸發現缺口，新增有序 V2，分別驗證已套用 V1 的專用 DB 升級，以及全新 DB 依序 V1→V2。不得清除或重建既有 DB 作為遷移修正方式。
+
 ## Prerequisites
 
 - Git checkout 處於 feature 實作完成狀態。
@@ -42,7 +44,7 @@ npm --prefix frontend ci
 docker compose --env-file infra/.env.local -f infra/compose.yaml up -d postgres
 ```
 
-確認容器健康且只發佈 loopback port。測試使用空白專用 volume；不可重用其他專案或個人 PostgreSQL 資料目錄。部署/服務名稱、healthcheck 與 volume 行為待實作後驗證。
+確認容器健康且只發佈 loopback port。T029 首次驗收使用全新、專用且空白的本機資料庫；不可重用其他專案或個人 PostgreSQL 資料目錄。部署/服務名稱、healthcheck 與 volume 行為待實作後驗證。V1 已套用的 DB 後續只能透過新增版本遷移升級，不可用清除或重建取代升級測試。
 
 ### 3. Apply migration and load fixed data
 
@@ -118,4 +120,4 @@ APP_ENV=local RESET_LOCAL_TEST_DATA=YES ./scripts/reset-local-test-data.sh --con
 
 ## Acceptance record to produce after implementation
 
-README 或共同/端別開發規範應記錄 OS、Node/Java/Docker/PostgreSQL 版本、執行目錄、必要 local services、逐條命令及成功結果。若某命令因環境限制沒有成功執行，明確列為待驗證並說明限制；不得宣稱本階段完整通過或 SC-006 滿足。
+README 或共同/端別開發規範應明確記錄本次完整驗收的單一目標 OS，並記錄該 OS 的 Node/Java/Docker/PostgreSQL 版本、執行目錄、必要 local services、逐條命令及成功結果；該 OS 本機基線命令須全數實際成功，才符合 SC-006 及該目標 OS 的第一階段完整驗收。macOS、Linux、Windows 其餘未實測平台須逐一標記「待驗證」，不得宣稱跨平台已驗收，但不因此否定已實測目標 OS 的階段結果。候選命令若未實際成功，持續標記待驗證；不得視為可用命令或完整驗收證據。
