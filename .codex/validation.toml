@@ -12,3 +12,20 @@ argv = ["python3", "-c", "from pathlib import Path; compile(Path('.codex/orchest
 
 [commands.build]
 argv = ["python3", "-c", "from pathlib import Path; [compile(path.read_text(encoding='utf-8'), str(path), 'exec') for path in Path('.codex/orchestrator').glob('*.py')]"]
+
+# First-stage application candidates from specs/001-local-fullstack-skeleton/quickstart.md.
+# These remain unverified until the frontend/backend skeleton exists and each command runs.
+[commands.frontend_test]
+argv = ["npm", "--prefix", "frontend", "test", "--", "--watch=false"]
+
+[commands.frontend_lint]
+argv = ["npm", "--prefix", "frontend", "run", "lint"]
+
+[commands.frontend_build]
+argv = ["npm", "--prefix", "frontend", "run", "build"]
+
+[commands.backend_checkstyle]
+argv = ["./mvnw", "-f", "backend/pom.xml", "checkstyle:check"]
+
+[commands.backend_verify]
+argv = ["./mvnw", "-f", "backend/pom.xml", "verify"]

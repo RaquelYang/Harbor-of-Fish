@@ -39,7 +39,7 @@
 ## Spec Kit 與實作 runner 的分工
 
 - Spec Kit 用於先整理需求與規格，再建立技術計畫和任務；Codex skills 安裝完成後，可依序使用 `$speckit-specify`、`$speckit-clarify`（需要釐清時）、`$speckit-plan`、`$speckit-tasks`。`$speckit-constitution` 僅在專案規則經確認後才填寫，不可把範本預設內容當成本專案規則。
-- Spec Kit 產生的 spec、plan、tasks 是實作輸入與追蹤文件，不會取代一般程式碼需求的 runner 流程。依本文件的標準流程，由 runner 呼叫 GPT-6 Luna implementer 執行，並由 Gemma reviewer 唯讀審查；不要以 `$speckit-implement` 繞過這個流程。
+- Spec Kit 產生的 spec、plan、tasks 是實作輸入與追蹤文件，不會取代一般程式碼需求的 runner 流程。本專案的 `$speckit-implement` 僅負責前置檢查、建立 repository 外計畫及啟動既有 runner；由 runner 呼叫 GPT-6 Luna implementer 實作，並由 Gemma reviewer 唯讀審查。skill 本身不得直接實作或繞過 runner，且仍須遵守乾淨工作區、驗證與 Git 授權規則。
 - Spec Kit skills 未安裝或 `specify integration status` 尚未辨識為 Codex 前，不要假設 `$speckit-*` 已可呼叫。安裝時使用 Spec Kit 官方 CLI；保留既有 `.agents/skills`、`.codex`、文件及產品檔案。
 
 ## 架構文件入口

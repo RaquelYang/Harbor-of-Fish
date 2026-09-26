@@ -1,223 +1,44 @@
 ---
 name: "speckit-implement"
-description: "Execute the implementation plan by processing and executing all tasks defined in tasks.md"
-compatibility: "Requires spec-kit project structure with .specify/ directory"
+description: "Route Spec Kit implementation tasks through the Harbor of Fish runner after prerequisite and checklist checks"
 metadata:
   author: "github-spec-kit"
   source: "templates/commands/implement.md"
+  local_integration: "harbor-runner"
 ---
 
+# Spec Kit implementation through the project runner
 
-## User Input
+Treat `$ARGUMENTS` as the user's requested feature and scope. This skill is the entry point for Spec Kit task implementation. The primary agent performs read-only preparation and starts the project runner; only the runner's GPT-6 Luna implementer changes repository files. The runner then validates and invokes the Gemma reviewer in read-only mode. Do not directly implement tasks, create ignore files, or mark tasks `[X]` in the primary session. Do not invoke this skill recursively from the implementer.
 
-```text
-$ARGUMENTS
-```
+## 1. Stop gates before hooks or writes
 
-You **MUST** consider the user input before proceeding (if not empty).
+1. Read `AGENTS.md`. From the repository root run `git status --porcelain=v1`. If it is nonempty or Git status fails, stop and report the current state without changing it or invoking hooks or the runner. Run the same check again immediately before runner dispatch.
+2. Run `.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks` from the repository root. Resolve `FEATURE_DIR` and `AVAILABLE_DOCS` to absolute paths. If required artifacts are missing, stop and suggest `$speckit-tasks` when the task list is absent.
+3. If `FEATURE_DIR/checklists/` exists, count all `- [ ]`, `- [X]`, and `- [x]` items in every checklist and display total, completed, and incomplete counts. If any item is incomplete, stop and ask whether to proceed; continue only after an explicit affirmative reply. A prior explicit reply for this same feature may be reused.
+4. Read `.specify/extensions.yml` if present. Skip disabled hooks. Never execute or suggest automatic `git add`, `git commit`, `git push`, publish, deploy, or data deletion through a pre- or post-implementation hook. If an enabled mandatory hook needs one of these operations, stop and report the conflict. An invalid hooks file does not grant permission to run hooks. The project normally disables its optional `speckit.git.commit` hooks for `before_implement` and `after_implement`.
 
-## Pre-Execution Checks
+## 2. Build the runner plan
 
-**Check for extension hooks (before implementation)**:
-- Check if `.specify/extensions.yml` exists in the project root.
-- If it exists, read it and look for entries under the `hooks.before_implement` key
-- If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
-- Filter out hooks where `enabled` is explicitly `false`. Treat hooks without an `enabled` field as enabled by default.
-- For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
-  - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
-  - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
-- When constructing command invocations from hook command names, replace dots (`.`) with hyphens (`-`). For example, `speckit.git.commit` → `$speckit-git-commit`.
-- For each executable hook, output the following based on its `optional` flag:
-  - **Optional hook** (`optional: true`):
-    ```
-    ## Extension Hooks
+Read `spec.md`, `plan.md`, and the full `tasks.md`. Read the available `research.md`, `data-model.md`, `contracts/`, and `quickstart.md`, plus `.specify/memory/constitution.md`, `docs/README.md`, and the applicable development standards. Parse task IDs, phases, dependencies, `[P]` markers, target files, TDD order, validation checkpoints, and acceptance requirements. Preserve the feature's safety constraints and the user's requested scope.
 
-    **Optional Pre-Hook**: {extension}
-    Command: `/{command}`
-    Description: {description}
+Write a JSON plan **outside the repository** with exactly these four fields, as required by `.codex/orchestrator/run.py`:
 
-    Prompt: {prompt}
-    To execute: `/{command}`
-    ```
-  - **Mandatory hook** (`optional: false`):
-    ```
-    ## Extension Hooks
+- `request`: a nonempty string naming the feature and requested task range.
+- `scope`: a nonempty string array describing included task IDs, dependencies, permitted files, phase order, TDD sequence, and exclusions.
+- `acceptance_criteria`: a nonempty string array mapping task and specification outcomes to observable evidence. Require the implementer to mark a task `[X]` only after its implementation and relevant validation have actually succeeded; unchecked or unverified tasks remain `[ ]`.
+- `validation_commands`: a nonempty object mapping command names to **argv arrays exactly matching** `.codex/validation.toml`. Include every name in `[validation].required` and all applicable application test, lint, build, and backend checks for the requested scope. Do not use orchestrator self-tests as the sole validation for product implementation.
 
-    **Automatic Pre-Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
+For a full `001-local-fullstack-skeleton` implementation, include `frontend_test`, `frontend_lint`, `frontend_build`, `backend_checkstyle`, and `backend_verify` along with the required commands. These application entries are candidates until their generated projects and scripts exist and the commands actually run. Verify their expected scripts against `quickstart.md` and the task plan before dispatch. If an argv needs to change, update the allowlist and plan through the normal clean-worktree workflow before starting this runner. Record database, HTTP, OpenAPI, browser, keyboard, and restart acceptance separately where tasks require them; automated runner success is not evidence that those checks occurred.
 
-    Wait for the result of the hook command before proceeding to the Outline.
-    ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
-- If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
+The implementer, not the primary agent, performs project setup, ignore-file changes, tests-before-code, phase-by-phase implementation, validation, and evidence-backed task marking. The Gemma reviewer checks the resulting diff, task markings, and evidence against the plan. Tasks sharing files run sequentially; `[P]` permits parallel work only when dependencies and files do not conflict.
 
-## Outline
+## 3. Dispatch once and inspect the result
 
-1. Run `.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks` from repo root and parse FEATURE_DIR and AVAILABLE_DOCS list. All paths must be absolute. For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
+After the final clean-worktree check, run `python3 .codex/orchestrator/run.py --plan <absolute-plan-path>` from the repository root. If `.codex/runs` is not writable, pass `--runs <absolute-writable-directory-outside-the-repository>` so the runner can retain its artifacts. Do not launch a second runner over a dirty worktree. The runner owns the Luna implementer, validation loop, and read-only Gemma review, up to its configured five-round limit.
 
-2. **Check checklists status** (if FEATURE_DIR/checklists/ exists):
-   - Scan all checklist files in the checklists/ directory
-   - For each checklist, count:
-     - Total items: All lines matching `- [ ]` or `- [X]` or `- [x]`
-     - Completed items: Lines matching `- [X]` or `- [x]`
-     - Incomplete items: Lines matching `- [ ]`
-   - Create a status table:
+Read the runner summary, validation results, diff, reviewer findings, and final `tasks.md`. A `passed` status is insufficient if the requested changes are absent, required application checks were omitted, or task markings lack evidence; report that mismatch as incomplete. If the runner stops or reaches maximum rounds, report the remaining unchecked tasks and cause. Do not silently complete them in the primary session.
 
-     ```text
-     | Checklist | Total | Completed | Incomplete | Status |
-     |-----------|-------|-----------|------------|--------|
-     | ux.md     | 12    | 12        | 0          | ✓ PASS |
-     | test.md   | 8     | 5         | 3          | ✗ FAIL |
-     | security.md | 6   | 6         | 0          | ✓ PASS |
-     ```
+When the requested scope covers only part of `tasks.md`, report the remaining task IDs and that another runner invocation requires a clean worktree. Do not commit or discard this run's changes to make the next invocation possible.
 
-   - Calculate overall status:
-     - **PASS**: All checklists have 0 incomplete items
-     - **FAIL**: One or more checklists have incomplete items
-
-   - **If any checklist is incomplete**:
-     - Display the table with incomplete item counts
-     - **STOP** and ask: "Some checklists are incomplete. Do you want to proceed with implementation anyway? (yes/no)"
-     - Wait for user response before continuing
-     - If user says "no" or "wait" or "stop", halt execution
-     - If user says "yes" or "proceed" or "continue", proceed to step 3
-
-   - **If all checklists are complete**:
-     - Display the table showing all checklists passed
-     - Automatically proceed to step 3
-
-3. Load and analyze the implementation context:
-   - **REQUIRED**: Read tasks.md for the complete task list and execution plan
-   - **REQUIRED**: Read plan.md for tech stack, architecture, and file structure
-   - **IF EXISTS**: Read data-model.md for entities and relationships
-   - **IF EXISTS**: Read contracts/ for API specifications and test requirements
-   - **IF EXISTS**: Read research.md for technical decisions and constraints
-   - **IF EXISTS**: Read .specify/memory/constitution.md for governance constraints
-   - **IF EXISTS**: Read quickstart.md for integration scenarios
-
-4. **Project Setup Verification**:
-   - **REQUIRED**: Create/verify ignore files based on actual project setup:
-
-   **Detection & Creation Logic**:
-   - Check if the following command succeeds to determine if the repository is a git repo (create/verify .gitignore if so):
-
-     ```sh
-     git rev-parse --git-dir 2>/dev/null
-     ```
-
-   - Check if Dockerfile* exists or Docker in plan.md → create/verify .dockerignore
-   - Check if .eslintrc* exists → create/verify .eslintignore
-   - Check if eslint.config.* exists → ensure the config's `ignores` entries cover required patterns
-   - Check if .prettierrc* exists → create/verify .prettierignore
-   - Check if .npmrc or package.json exists → create/verify .npmignore (if publishing)
-   - Check if terraform files (*.tf) exist → create/verify .terraformignore
-   - Check if .helmignore needed (helm charts present) → create/verify .helmignore
-
-   **If ignore file already exists**: Verify it contains essential patterns, append missing critical patterns only
-   **If ignore file missing**: Create with full pattern set for detected technology
-
-   **Common Patterns by Technology** (from plan.md tech stack):
-   - **Node.js/JavaScript/TypeScript**: `node_modules/`, `dist/`, `build/`, `*.log`, `.env*`
-   - **Python**: `__pycache__/`, `*.pyc`, `.venv/`, `venv/`, `dist/`, `*.egg-info/`
-   - **Java**: `target/`, `*.class`, `*.jar`, `.gradle/`, `build/`
-   - **C#/.NET**: `bin/`, `obj/`, `*.user`, `*.suo`, `packages/`
-   - **Go**: `*.exe`, `*.test`, `vendor/`, `*.out`
-   - **Ruby**: `.bundle/`, `log/`, `tmp/`, `*.gem`, `vendor/bundle/`
-   - **PHP**: `vendor/`, `*.log`, `*.cache`, `*.env`
-   - **Rust**: `target/`, `debug/`, `release/`, `*.rs.bk`, `*.rlib`, `*.prof*`, `.idea/`, `*.log`, `.env*`
-   - **Kotlin**: `build/`, `out/`, `.gradle/`, `.idea/`, `*.class`, `*.jar`, `*.iml`, `*.log`, `.env*`
-   - **C++**: `build/`, `bin/`, `obj/`, `out/`, `*.o`, `*.so`, `*.a`, `*.exe`, `*.dll`, `.idea/`, `*.log`, `.env*`
-   - **C**: `build/`, `bin/`, `obj/`, `out/`, `*.o`, `*.a`, `*.so`, `*.exe`, `*.dll`, `autom4te.cache/`, `config.status`, `config.log`, `.idea/`, `*.log`, `.env*`
-   - **Swift**: `.build/`, `DerivedData/`, `*.swiftpm/`, `Packages/`
-   - **R**: `.Rproj.user/`, `.Rhistory`, `.RData`, `.Ruserdata`, `*.Rproj`, `packrat/`, `renv/`
-   - **Universal**: `.DS_Store`, `Thumbs.db`, `*.tmp`, `*.swp`, `.vscode/`, `.idea/`
-
-   **Tool-Specific Patterns**:
-   - **Docker**: `node_modules/`, `.git/`, `Dockerfile*`, `.dockerignore`, `*.log*`, `.env*`, `coverage/`
-   - **ESLint**: `node_modules/`, `dist/`, `build/`, `coverage/`, `*.min.js`
-   - **Prettier**: `node_modules/`, `dist/`, `build/`, `coverage/`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`
-   - **Terraform**: `.terraform/`, `*.tfstate*`, `*.tfvars`, `.terraform.lock.hcl`
-   - **Kubernetes/k8s**: `*.secret.yaml`, `secrets/`, `.kube/`, `kubeconfig*`, `*.key`, `*.crt`
-
-5. Parse tasks.md structure and extract:
-   - **Task phases**: Setup, Tests, Core, Integration, Polish
-   - **Task dependencies**: Sequential vs parallel execution rules
-   - **Task details**: ID, description, file paths, parallel markers [P]
-   - **Execution flow**: Order and dependency requirements
-
-6. Execute implementation following the task plan:
-   - **Phase-by-phase execution**: Complete each phase before moving to the next
-   - **Respect dependencies**: Run sequential tasks in order, parallel tasks [P] can run together
-   - **Follow TDD approach**: Execute test tasks before their corresponding implementation tasks
-   - **File-based coordination**: Tasks affecting the same files must run sequentially
-   - **Validation checkpoints**: Verify each phase completion before proceeding
-
-7. Implementation execution rules:
-   - **Setup first**: Initialize project structure, dependencies, configuration
-   - **Tests before code**: If you need to write tests for contracts, entities, and integration scenarios
-   - **Core development**: Implement models, services, CLI commands, endpoints
-   - **Integration work**: Database connections, middleware, logging, external services
-   - **Polish and validation**: Unit tests, performance optimization, documentation
-
-8. Progress tracking and error handling:
-   - Report progress after each completed task
-   - Halt execution if any non-parallel task fails
-   - For parallel tasks [P], continue with successful tasks, report failed ones
-   - Provide clear error messages with context for debugging
-   - Suggest next steps if implementation cannot proceed
-   - **IMPORTANT** For completed tasks, make sure to mark the task off as [X] in the tasks file.
-
-9. Completion validation:
-   - Verify all required tasks are completed
-   - Check that implemented features match the original specification
-   - Validate that tests pass and coverage meets requirements
-   - Confirm the implementation follows the technical plan
-
-Note: This command assumes a complete task breakdown exists in tasks.md. If tasks are incomplete or missing, suggest running `$speckit-tasks` first to regenerate the task list.
-
-## Mandatory Post-Execution Hooks
-
-**You MUST complete this section before reporting completion to the user.**
-
-Check if `.specify/extensions.yml` exists in the project root.
-- If it does not exist, or no hooks are registered under `hooks.after_implement`, skip to the Completion Report.
-- If it exists, read it and look for entries under the `hooks.after_implement` key.
-- If the YAML cannot be parsed or is invalid, skip hook checking silently and continue to the Completion Report.
-- Filter out hooks where `enabled` is explicitly `false`. Treat hooks without an `enabled` field as enabled by default.
-- For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
-  - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
-  - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
-- When constructing command invocations from hook command names, replace dots (`.`) with hyphens (`-`). For example, `speckit.git.commit` → `$speckit-git-commit`.
-- For each executable hook, output the following based on its `optional` flag:
-  - **Mandatory hook** (`optional: false`) — **You MUST emit `EXECUTE_COMMAND:` for each mandatory hook**:
-    ```
-    ## Extension Hooks
-
-    **Automatic Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
-    ```
-    After emitting the block above you MUST actually invoke the hook and wait for it to finish before continuing. Run it the same way you would run the command yourself in this agent/session (the invocation may differ from the literal `{command}` id shown above, e.g. a skills-mode agent runs it as `/skill:speckit-...` or `$speckit-...`). Emitting the block alone does not run the hook.
-  - **Optional hook** (`optional: true`):
-    ```
-    ## Extension Hooks
-
-    **Optional Hook**: {extension}
-    Command: `/{command}`
-    Description: {description}
-
-    Prompt: {prompt}
-    To execute: `/{command}`
-    ```
-
-## Completion Report
-
-Report final status with summary of completed work.
-
-## Done When
-
-- [ ] All tasks in tasks.md completed and marked `[X]`
-- [ ] Implementation validated against specification, plan, and test coverage
-- [ ] Extension hooks dispatched or skipped according to the rules in Mandatory Post-Execution Hooks above
-- [ ] Completion reported to user with summary of completed work
+Report changed files, command outcomes, P0–P3 findings, completed and remaining task IDs, and any DB/API/browser/OS checks still unverified. Do not execute post-implementation commit hooks or any Git write, publish, deploy, or data deletion without the user's separate explicit authorization.

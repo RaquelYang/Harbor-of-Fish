@@ -51,7 +51,7 @@ hooks:
   before_implement:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     priority: 10
     prompt: Commit outstanding changes before implementation?
@@ -132,7 +132,7 @@ hooks:
   after_implement:
   - extension: git
     command: speckit.git.commit
-    enabled: true
+    enabled: false
     optional: true
     priority: 10
     prompt: Commit implementation changes?
