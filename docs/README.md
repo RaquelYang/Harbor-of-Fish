@@ -20,3 +20,5 @@
 - [後端開發規範](backend-development-standards.md)：Spring Boot 領域模組、資料庫與授權及後端測試邊界。
 
 開發者與 AI agent 必須遵守共同規範及工作範圍對應的前端或後端規範；實際工具與命令待程式骨架建立後補定。
+
+第一階段骨架建立後，repository 根目錄的 `README.md` 是本機跨端與完整驗收的總紀錄：記錄目標 OS、實際版本、資料庫／API／瀏覽器流程、執行命令與結果。[前端開發規範](frontend-development-standards.md)與[後端開發規範](backend-development-standards.md)分別記錄各端已實際執行的命令、執行目錄、必要服務、版本及結果，或直接連到根目錄 `README.md` 中對應的實測段落。每項端別證據須有一處實際紀錄，另一處可連到該段落，不可以互相連結代替紀錄；未執行的命令維持「待驗證」。目前尚無這些應用驗證結果。

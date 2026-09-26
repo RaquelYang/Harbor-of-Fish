@@ -8,7 +8,7 @@
 
 ## Technical Context
 
-**Language/Version**: TypeScript 5.9.x；Java 21 LTS；SQL（PostgreSQL 18）；Node.js 22.12+（Angular 21 相容範圍內；以 repository 版本檔固定 major/minimum）。
+**Language/Version**: TypeScript 5.9.x；Java 21 LTS；SQL（PostgreSQL 18）；Node.js 22.x 且最低 22.12.0。根目錄 `.nvmrc` 寫 `22` 以選擇 22 線；`frontend/package.json` 的 `engines.node` 寫 `>=22.12.0 <23` 以表達最低版本與 major 上限。實作後執行 `nvm use`、`node --version` 並核對 `engines.node`，記錄實際選到的版本與結果；這些命令目前待驗證。
 
 **Primary Dependencies**: Angular 21 / Angular CLI、ESLint/@angular-eslint；Spring Boot 4.1.1；Spring Web、Validation、Spring Data JDBC、Flyway PostgreSQL support；PostgreSQL JDBC driver；Maven Checkstyle plugin；Docker Compose；npm 與 Maven Wrapper 3.9.11。
 
@@ -85,7 +85,7 @@ specs/001-local-fullstack-skeleton/    # 本 feature 計畫與驗收契約
 ## Design Decisions
 
 1. **三筆中性 JSON fixtures**：每筆用固定 UUID、唯一 `fixtureKey`、繁中中性標題與說明、固定 `datasetVersion` 和 `testOnly=true`。先檢查完整檔案、欄位、長度、唯一性、筆數和測試標記，再開單一交易 upsert；任何一筆無效時零筆寫入。重複載入以 `fixture_key` 唯一約束覆寫為版控檔的 canonical 值，筆數及內容不變。格式細節見 [data-model.md](data-model.md)。
-2. **schema 與 fixture 分離、遷移不可變**：`V1__create_local_test_fixture.sql` 建立專用 schema/table、NOT NULL、長度、唯一與 `test_only = true` 限制；Flyway migration 不插入可變 fixture rows。T013-T015 須在 PostgreSQL 上測試 V1 的 schema history、必要欄位及各項限制拒絕非法列，並以有效紅燈和綠燈證據完成；此驗收必須先於 T029 首次端到端驗收及其全新本機 DB 首次套用 V1。V1 一旦套用即視為已發布遷移，不得原地修改。若後續 T036-T037 回歸發現限制缺口，須新增有序 V2 遷移，分別驗證已套用 V1 的專用本機 DB 升級 V1→V2，以及全新 DB 從 V1→V2 的完整路徑；不得清除或重建 DB 作為修正方式。整體順序是空 DB → Flyway migrate/validate → API local profile 完成啟動 → loader 驗證並載入 fixtures → 前端與 API 驗收。錯誤遷移阻止 API 正常就緒；API 在載入前若收到 list 查詢，應回空集合並保留 test metadata，不能回傳假成功資料。
+2. **schema 與 fixture 分離、遷移不可變**：`V1__create_local_test_fixture.sql` 建立專用 schema/table、NOT NULL、長度、唯一與 `test_only = true` 限制；Flyway migration 不插入可變 fixture rows。T013-T015 須在 PostgreSQL 上測試 V1 的 schema history、必要欄位及各項限制拒絕非法列，並以有效紅燈和綠燈證據完成；此驗收必須先於 T029 首次端到端驗收及其全新本機 DB 首次套用 V1。V1 一旦套用即視為已發布遷移，不得原地修改。T036-T037 重跑 T013 的既有 `FlywayMigrationIT` 作 V1 限制回歸，不另建重複的限制矩陣；若回歸發現限制缺口，須新增有序 V2 遷移，分別驗證已套用 V1 的專用本機 DB 升級 V1→V2，以及全新 DB 從 V1→V2 的完整路徑；不得清除或重建 DB 作為修正方式。整體順序是空 DB → Flyway migrate/validate → API local profile 完成啟動 → loader 驗證並載入 fixtures → 前端與 API 驗收。錯誤遷移阻止 API 正常就緒；API 在載入前若收到 list 查詢，應回空集合並保留 test metadata，不能回傳假成功資料。
 3. **清除採 fail-closed**：清除命令要求明確 `APP_ENV=local` 與 `RESET_LOCAL_TEST_DATA=YES`；JDBC host、port、database、登入資料庫回報的 `current_database()` 必須分別符合 `127.0.0.1`、`5432`、`harbor_local`、`harbor_local`，並要求明確確認旗標。任一缺少、不符、解析失敗即在執行 DELETE 前退出非零。成功時僅交易刪除 fixture table 中 `test_only=true` rows，驗證刪除數量；不執行 schema/database drop 或 Flyway clean。Compose 僅將 DB port 發佈到 loopback。測試需驗證不符環境、遠端 host、正式名稱、錯誤連線與缺旗標全都在 mutation 前拒絕。agent 執行任何可能觸發 DELETE 的驗證或實際清除前，另須呈明具體命令與目標並取得使用者明確授權；未獲授權的允許清除測試與本機重設保留待驗證，不得因 guard 通過就自行執行。
 4. **local/test 專用唯讀 API**：local/test Spring profile 才註冊 `/api/v1/local-test/fixtures` 與 `/{fixtureKey}`；其他 profile 啟動時不掛載路由並拒絕 fixture loader/reset。T016 須先測列表路由在非 local/test profile 不存在，再於 T018 實作該限制；T045 須先測單筆路由的相同限制，再於 T047 實作，T048 僅回歸兩條既有路由限制並新增 loader/reset 的 profile 邊界測試。DTO 不暴露資料庫實體。成功 envelope 提供 `testOnly`、`datasetVersion`、`count`；錯誤使用 RFC 9457 Problem Details 加穩定 `code` 和欄位錯誤，服務端日誌可記 correlation ID，但回應不帶 stack、SQL、秘密或內部 hostname。契約詳見 OpenAPI。
 5. **前端狀態由頁面持有**：單一 typed API client 執行應用資料 HTTP 呼叫，頁面以 discriminated state 表達 `loading | success | empty | error`；成功/空/錯誤均有固定「僅供測試」說明，不以 fixture 假資料遮蔽 API 失敗；錯誤提供重試。開發代理只轉送 `/api` 應用資料請求，不把 DB 設定帶入前端；瀏覽器載入 HTML、JavaScript、CSS 等靜態資源不屬於 SC-004 的應用資料請求。
@@ -93,11 +93,11 @@ specs/001-local-fullstack-skeleton/    # 本 feature 計畫與驗收契約
 ## Validation Strategy
 
 - **契約先行與 TDD**：先以 OpenAPI / HTTP 行為測試固定成功 envelope、錯誤形狀、400 格式錯誤、404 不存在項目及 local/test profile 外不可用；列表的非 local/test 測試納入 T016，先於 T018，單筆的非 local/test 測試納入 T045，先於 T047。T048 回歸兩條路由限制，並先測 loader/reset 在非 local/test profile 不可用，再按小切片實作。
-- **資料與遷移**：T013-T015 在首次端到端流程 T029 前，使用 PostgreSQL Testcontainers 實際套用 V1，檢查 schema history、必要欄位與每項必要 CHECK/NOT NULL/唯一限制的違規寫入拒絕，以及遷移失敗時應用不就緒；T014 紅燈須由 Failsafe 報告證明是預期資料庫行為缺失，T015 綠燈須證明同一 PostgreSQL 測試通過。T036-T037 可在 US2 執行較完整限制回歸，不得修改已套用 V1；若回歸揭露缺口，新增有序 V2，測試專用 DB V1→V2 升級與全新 DB V1→V2 兩路徑，保留既有資料及 Flyway history，不清除或重建 DB。Integration tests 不以 H2 代替 PostgreSQL。
+- **資料與遷移**：T013-T015 在首次端到端流程 T029 前，使用 PostgreSQL Testcontainers 實際套用 V1，檢查 schema history、必要欄位與每項必要 CHECK/NOT NULL/唯一限制的違規寫入拒絕，以及遷移失敗時應用不就緒；T014 紅燈須由 Failsafe 報告證明是預期資料庫行為缺失，T015 綠燈須證明同一 PostgreSQL 測試通過。T036-T037 在 US2 重跑既有 `FlywayMigrationIT` 的 V1 限制案例並檢查報告，不建立內容重複的 `LocalFixtureConstraintsIT`；若回歸揭露缺口，新增有序 V2 與針對缺口的升級驗證，測試專用 DB V1→V2 升級與全新 DB V1→V2 兩路徑，保留既有資料及 Flyway history，不清除或重建 DB。Integration tests 不以 H2 代替 PostgreSQL。
 - **載入與清除**：成功載入、重複兩次、檔案缺欄/型別錯誤/重複 key/非測試標記時整批拒絕；比對 count 與每欄值。T012 先提供不含 DELETE、只回 `NOT_IMPLEMENTED` 的可呼叫 reset 佔位入口；T038-T040 的 guard 拒絕案例須辨識具體拒絕原因，不能以入口不存在或固定 `NOT_IMPLEMENTED` 回應充數；允許清除案例驗證核准本機條件下只移除測試 rows，所有錯誤 guard 案例確認資料未改變。agent 在執行任何可能刪除資料的測試或命令前，須另取得使用者對命令與目標的明確授權；未獲授權時只保留測試設計與未執行狀態，相關結果標為待驗證。
 - **後端**：application/module 測試觀察查詢與冪等結果；MockMvc 驗證路由、輸入、成功 DTO、錯誤與 profile 邊界；PostgreSQL integration 驗證 Flyway、保存/讀取、unique/check constraints 及 transaction rollback。
-- **前端**：API client HTTP 測試驗證型別映射、網路錯誤和 Problem Details；Angular component/頁面測試驗證 loading、非空 success、empty、error、retry 與測試標記可見，且不由元件私自發送應用資料 HTTP 呼叫。瀏覽器驗收只檢查應用資料請求透過 `/api/v1`，不把頁面靜態資源請求誤判為資料請求。
-- **跨端與重啟**：依 [quickstart.md](quickstart.md) 從新 clone/乾淨 local DB 執行，載入、呼叫 API、看繁中頁、停掉並重啟服務；確認資料與欄位完全相同。quickstart 列出的 reset 候選命令不構成資料刪除授權，仍須先完成本計畫的另行明確授權閘門。命令須在後續實作環境逐條實際執行，結果寫入 README 或端別開發規範。
+- **前端**：API client HTTP 測試驗證型別映射、網路錯誤和 Problem Details；Angular component/頁面測試驗證 loading、非空 success、empty、error、retry 與測試標記可見，且不由元件私自發送應用資料 HTTP 呼叫。瀏覽器空集合驗收以瀏覽器對列表 GET 的受控回應提供符合契約的 `data=[]` 與 `meta`，不清除既有資料；記錄攔截方式、回應內容與資料來源，恢復實際請求後另驗三筆成功。此項只證明畫面空狀態，真實 API 載入前的空集合契約由 T016 獨立驗證，受控回應不得稱為資料庫端到端證據。瀏覽器驗收只檢查應用資料請求透過 `/api/v1`，不把頁面靜態資源請求誤判為資料請求。
+- **跨端與重啟**：依 [quickstart.md](quickstart.md) 從新 clone/乾淨 local DB 執行，載入、呼叫 API、看繁中頁、停掉並重啟服務；確認資料與欄位完全相同。quickstart 列出的 reset 候選命令不構成資料刪除授權，仍須先完成本計畫的另行明確授權閘門。命令須在後續實作環境逐條實際執行；根目錄 `README.md` 彙整目標 OS、跨端冒煙、重啟與完整驗收，前後端開發規範各自記錄或直接連到對應端的實測命令、報告及結果。未執行者維持「待驗證」。
 - **命令狀態**：本計畫建立時僅 `setup-plan.sh --json` 已實際執行；應用骨架、build、lint、測試、遷移及冒煙命令均尚無可驗證目標，quickstart 以「候選／待驗證」明示。不得把文件中的命令列為可用基線，亦不得宣稱 SC-006 已通過。
 - **平台驗收界線**：SC-006 的完整驗收只依本次明確記錄的單一目標 OS 判定，該 OS 本機基線命令須全部實際成功。T003 須建立 POSIX 與 Windows Maven Wrapper；只要求本次目標 OS 對應的 wrapper 命令實際執行並有報告，其他 OS 的 wrapper 執行結果逐一標「待驗證」，不以未實測平台阻擋目標 OS 的階段判定。對 macOS、Linux、Windows 其餘未實測平台逐一標「待驗證」，不得宣稱跨平台驗收；這不會否定目標 OS 已實測達成的階段結果。計畫、quickstart 或任務中未實際執行的命令均維持候選／待驗證。
 

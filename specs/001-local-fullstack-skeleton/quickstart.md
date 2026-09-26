@@ -1,24 +1,27 @@
 # Quickstart: 第一階段本機驗收流程
 
-本文件定義骨架完成後應可重現的驗收順序。**以下全是計畫中的候選命令，尚未在實際骨架執行，狀態均為「待驗證」，目前不可視為已可用的專案指令。**實作後須依產生的 wrapper、script、service 和實際輸出修訂命令，逐條成功執行後才可標為已驗證並寫入 README 或端別規範。版本決策見 [research.md](research.md)，資料和契約見 [data-model.md](data-model.md) 與 [contracts/openapi.yaml](contracts/openapi.yaml)。
+本文件定義骨架完成後應可重現的驗收順序。**以下全是計畫中的候選命令，尚未在實際骨架執行，狀態均為「待驗證」，目前不可視為已可用的專案指令。**實作後須依產生的 wrapper、script、service 和實際輸出修訂命令，逐條成功執行後才可標為已驗證；根目錄 `README.md` 彙整跨端與完整驗收，前後端開發規範各自記錄或直接連到對應端的實測證據。版本決策見 [research.md](research.md)，資料和契約見 [data-model.md](data-model.md) 與 [contracts/openapi.yaml](contracts/openapi.yaml)。
 
 T029 首次以本機 DB 驗收前，必須先完成 T013-T015 的 PostgreSQL V1 schema 與必要限制測試，並記錄有效紅燈及綠燈證據。V1 一旦套用即不可原地修改；若後續 T036-T037 回歸發現缺口，新增有序 V2，分別驗證已套用 V1 的專用 DB 升級，以及全新 DB 依序 V1→V2。不得清除或重建既有 DB 作為遷移修正方式。
 
 ## Prerequisites
 
 - Git checkout 處於 feature 實作完成狀態。
-- Node.js 22.12+ / npm、Java 21、Docker Compose v2 可用；精確 patch 版本待 lockfile/wrapper 生成後填入並實測。
+- Node.js 22.x 且最低 22.12.0 / npm、Java 21、Docker Compose v2 可用；`.nvmrc` 選擇 22 線，`frontend/package.json` 的 `engines.node` 限定 `>=22.12.0 <23`；精確版本待實作後實測。
 - Docker daemon 可啟動 PostgreSQL 18.6 容器。
 - 不需真實憑證、第三方 API、外部資料來源或網路產品環境。
 
 Candidate version checks — **待驗證**：
 
 ```sh
+nvm use
 node --version
 npm --version
 java --version
 docker compose version
 ```
+
+於 repository 根目錄執行 `nvm use` 後，核對 `node --version` 的實際版本符合 `frontend/package.json` 的 `engines.node`；若選到低於 22.12.0 的 22.x，先安裝符合範圍的 22.x 再檢查。以上版本檢查尚未執行。
 
 ## Clean local acceptance
 
@@ -80,7 +83,7 @@ npm --prefix frontend start
 
 列表回應應有三筆，item/list 欄位符合 OpenAPI，所有 records 與 metadata 都有 `testOnly: true`。有效但不存在 key 預期為 404 `FIXTURE_NOT_FOUND`；格式無效 key 預期為 400 `INVALID_FIXTURE_KEY` 和欄位錯誤；任何 error body 都不能有 stack trace、SQL、secret 或內部 hostname。用 local profile 以外設定呼叫時，預期 endpoint 不存在/不可用。前端以 `/api` proxy 連到 API，不連資料庫。
 
-在瀏覽器開 `http://localhost:4200`（port 待 Angular CLI 確認）檢查繁體中文測試頁：固定可見「僅供本機測試，非真實漁港、魚種、漁季、價格或限制資料」；分別確認 loading、三筆成功、空集合、API unavailable/error、retry 狀態及鍵盤可操作性。API 不可用時不可展示看似成功的 fallback fixtures。瀏覽器步驟待 UI 實作後執行。
+在瀏覽器開 `http://localhost:4200`（port 待 Angular CLI 確認）檢查繁體中文測試頁：固定可見「僅供本機測試，非真實漁港、魚種、漁季、價格或限制資料」；分別確認 loading、三筆成功、空集合、API unavailable/error、retry 狀態及鍵盤可操作性。空集合畫面以瀏覽器僅攔截 `GET /api/v1/local-test/fixtures` 並回覆符合契約的 `data=[]`、`meta.testOnly=true`、`meta.datasetVersion=1.0.0`、`meta.count=0` 驗收，無須清除既有 DB 資料；記錄攔截方式、受控回應內容及測試資料來源，解除攔截後再確認真實 API 的三筆成功畫面。此受控回應只證明前端空狀態，真實 API 的空集合契約由 T016 的 HTTP 測試另證，不得宣稱此步驟已驗證資料庫端到端空集合。API 不可用時不可展示看似成功的 fallback fixtures。瀏覽器步驟待 UI 實作後執行。
 
 ### 5. Test, lint and build
 
@@ -120,4 +123,4 @@ APP_ENV=local RESET_LOCAL_TEST_DATA=YES ./scripts/reset-local-test-data.sh --con
 
 ## Acceptance record to produce after implementation
 
-README 或共同/端別開發規範應明確記錄本次完整驗收的單一目標 OS，並記錄該 OS 的 Node/Java/Docker/PostgreSQL 版本、執行目錄、必要 local services、逐條命令及成功結果；該 OS 本機基線命令須全數實際成功，才符合 SC-006 及該目標 OS 的第一階段完整驗收。macOS、Linux、Windows 其餘未實測平台須逐一標記「待驗證」，不得宣稱跨平台已驗收，但不因此否定已實測目標 OS 的階段結果。候選命令若未實際成功，持續標記待驗證；不得視為可用命令或完整驗收證據。
+根目錄 `README.md` 應明確記錄本次完整驗收的單一目標 OS，並彙整該 OS 的 Node/Java/Docker/PostgreSQL 實際版本、執行目錄、必要 local services、跨端冒煙／重啟與逐條基線命令及結果；前端、後端開發規範各自記錄或直接連結對應端的實測命令、報告與結果。該 OS 本機基線命令須全數實際成功，才符合 SC-006 及該目標 OS 的第一階段完整驗收。macOS、Linux、Windows 其餘未實測平台須逐一標記「待驗證」，不得宣稱跨平台已驗收，但不因此否定已實測目標 OS 的階段結果。候選命令若未實際成功，持續標記待驗證；不得視為可用命令或完整驗收證據。
