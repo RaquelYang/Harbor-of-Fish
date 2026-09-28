@@ -110,7 +110,7 @@ Test suites 須涵蓋 API success/error/input, profile boundary, exact persisten
 
 停止 API 與前端再啟動，重讀列表並逐欄比對三筆資料與 marker 完全相同。
 
-重設僅用於本機 fixture rows。執行前確認四個環境條件與登入連線後的 `current_database()` 均符合計畫；以下命令亦待驗證：
+重設僅用於本機 fixture rows。以下仍是候選流程，尚未實作或實際執行，狀態為「待驗證」。執行前除確認原有環境、loopback、port、database、user、啟動 profile、確認旗標及 JDBC 登入連線後的 `current_database()` 均符合計畫，還必須由 repository 管理的專用 Compose PostgreSQL 獨立管理通道取得預期 `pg_control_system().system_identifier`，並透過待清除 JDBC 連線讀取實際 identifier；確認受管理容器與 JDBC 目標確實對應且兩值相同後，才可進入允許清除流程。若為整合測試，預期值來源必須是測試明確建立的隔離 PostgreSQL 容器。不得從待清除 JDBC URL／同組環境變數或可任意覆寫參數提供預期值；單獨的 identifier 也不能證明本機性，因此不能省略原有 guards。無法取得預期或實際值、讀取權限不足、容器對應無法確認或兩值不符，均須在任何 DELETE 前以可辨識原因拒絕且零 DELETE。此受管理來源與 JDBC 值的比對只是額外 guard，不能取代使用者對具體命令及目標另行明確授權；未取得授權不得執行任何可能刪除資料的命令或測試。
 
 ```sh
 set -a
@@ -119,7 +119,7 @@ set +a
 APP_ENV=local RESET_LOCAL_TEST_DATA=YES ./scripts/reset-local-test-data.sh --confirm-local-fixture-delete
 ```
 
-拒絕案例必須先以自動測試驗證，包括 `APP_ENV` 缺漏或非 local、確認變數/旗標缺漏、非 loopback host、port/database/user 不符、連線實際 database 不符、環境設定解析失敗。以上案例都必須在任何 DELETE 前非零結束且保留所有資料。成功後只有 `local_test_fixture` 中 `test_only=true` rows 消失；schema、Flyway history 與其他 table 不變。再次執行 loader 後應恢復三筆 canonical rows，重跑冒煙和 UI 驗收。不得以資料庫或 schema drop 取代本程序。
+拒絕案例必須先以自動測試驗證，包括 `APP_ENV` 缺漏或非 local、確認變數／旗標缺漏、非 loopback host、port/database/user 不符、連線實際 database 不符、環境設定解析失敗；新增「所有原有連線設定合法但預期與實際 `system_identifier` 不同」、「預期值來源無法讀取或權限不足」、「待清除 JDBC 實際身分讀取／權限不足」及「受管理 Compose／隔離測試容器與 JDBC 目標對應無法確認」案例。每個拒絕案例須在任何 DELETE 前回報可辨識原因、非零結束、確認零 DELETE 並保留所有資料；身分比對成功不能取代使用者對具體命令與目標的另行明確授權。只有另行獲得授權且全部 guards 通過後，允許清除流程才可驗證只有 `local_test_fixture` 中 `test_only=true` rows 消失；schema、Flyway history 與其他 table 不變。再次執行 loader 後應恢復三筆 canonical rows，重跑冒煙和 UI 驗收。不得以資料庫或 schema drop 取代本程序。
 
 ## Acceptance record to produce after implementation
 
