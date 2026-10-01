@@ -6,11 +6,13 @@
 
 **命令狀態**: [quickstart.md](quickstart.md) 的安裝、啟動、測試、lint、build、資料庫、冒煙與重啟命令目前全部**待驗證**。以下要求執行命令的任務是未來實作與驗收步驟，不表示本次產生清單時已執行或已通過。實作時若生成工具改變命令，先修正候選命令，再以實際輸出記錄結果；根目錄 `README.md` 彙整跨端與完整驗收，前後端開發規範各自記錄或直接連到對應端的實測證據。
 
-**TDD 執行規則**: 每個切片依「寫公開行為測試 → 用當時可用的最小測試命令確認因缺少該行為而紅燈 → 最小實作 → 同一測試綠燈 → 必要重構與受影響測試」順序進行。每項紅燈須記錄實際選取的測試、失敗斷言與原因；`NOT_IMPLEMENTED`、編譯失敗、依賴或測試環境故障本身不得冒充預期行為的紅燈。不得先批量寫完所有測試才開始實作；測試以 HTTP、資料庫持久化、命令退出碼及使用者可見畫面為觀察邊界。
+**TDD 執行規則**：任務 ID 表示測試、紅燈確認、資料準備與實作的責任，不表示可以先完成整組測試再一次實作。包含多個獨立新行為的任務群組，必須逐行為重複「只新增目前切片的公開行為測試 → 確認有效紅燈 → 最小實作 → 同一測試綠燈 → 已完成行為回歸」，目前切片轉綠後才新增下一切片。相同規則、相同可觀察結果的不同輸入可使用資料驅動矩陣；profile 拒絕、來源驗證、成功持久化、畫面狀態與重試等不同結果，不得合併為一次批量紅綠。
+
+每項紅燈須記錄實際命令、選取測試、失敗斷言及原因；`NOT_IMPLEMENTED`、編譯、依賴、設定或測試環境故障本身不得冒充預期行為的紅燈。既有行為已通過時，記錄綠燈回歸，不要求再次故意失敗。群組內各任務須等其負責的全部切片與回歸完成後才能勾選；候選命令未實際執行前維持「待驗證」。
 
 **資料刪除授權**: agent 在執行任何可能觸發資料刪除的命令或測試前，須先列出具體命令與目標並取得使用者另行明確授權；本機 allow-list、測試資料標記及確認旗標均不能代替授權。未獲授權時可撰寫測試與文件，但不得執行該命令或將允許清除、重載及依賴它們的完整驗收標為已驗證。
 
-**路徑約定**: 後端 Java 根套件採 `org.harboroffish`，本階段只設 `localtest` 模組，內部分 `api`、`application`、`fixture`，不預設其他領域模組。`[P]` 僅表示目標檔案與未完成任務沒有相依，可同時處理；其餘按 ID 順序執行。
+**路徑約定**: 後端 Java 根套件採 `org.harboroffish`，本階段只設 `localtest` 模組，內部分 `api`、`application`、`fixture`，不預設其他領域模組。`[P]` 僅表示目標檔案與未完成任務沒有相依，可同時處理；其餘依任務相依順序執行；同一 TDD 群組內依上述規則往返測試、紅燈確認與實作任務，完成目前行為後才進入下一行為，不以 ID 遞增要求先批量完成所有測試。
 
 ## Phase 1: Setup（第一階段共用骨架）
 
@@ -30,7 +32,7 @@
 **目標**: 建立 local/test 邊界與可運行的測試環境；不在此階段偷做故事功能。
 
 - [ ] T009 在 `backend/src/main/resources/application.yaml`、`application-local.yaml` 與 `application-test.yaml` 僅建立環境變數驅動的資料庫、Flyway、local/test profile 設定；local/test API server 明確只監聽 `127.0.0.1` 或作業系統等價的 loopback 位址，不得綁定 `0.0.0.0` 或外部介面；缺少必要設定時指出設定種類但遮蔽值。此任務不預先實作 fixture loader/reset 的非 local/test profile 拒絕行為，該行為分別留待 T019–T022、T038–T040 先測後做。
-- [ ] T010 在 `backend/src/test/java/org/harboroffish/support/PostgresIntegrationTest.java` 建立 PostgreSQL 18 Testcontainers 測試底座，讓後續遷移與持久化測試使用真實 PostgreSQL，不以 H2 代替。
+- [ ] T010 在 `backend/src/test/java/org/harboroffish/support/PostgresIntegrationTest.java` 建立 PostgreSQL 18 Testcontainers 測試底座，讓後續遷移與持久化測試使用真實 PostgreSQL，不以 H2 代替。一般遷移／載入測試使用各自隔離容器；reset 整合測試另使用專用容器，明確將 PostgreSQL 發佈至主機 `127.0.0.1:5432`，database 與登入 user 均為 `harbor_local`，並使用合法的 local/test profile 與所需環境設定。不得將此測試目標指向既有 Compose 資料庫。測試底座須從其建立並持有的容器管理資訊確認容器身分、loopback port mapping、database 與 user，並透過該容器的獨立管理通道取得預期 `system_identifier`；不得從待清除 JDBC 連線或任意覆寫參數取得預期值。Reset 測試不得平行啟動多個占用同一 host port 的容器；port 已占用、綁定位址不符或容器對應無法確認時，停止並回報環境限制，不重用占用者、不改用其他 port、不放寬 guards。建立測試底座本身不授權執行任何 DELETE。
 - [ ] T011 在 `frontend/src/app/app.config.ts`、`frontend/src/app/app.routes.ts` 與 `frontend/src/app/app.ts` 建立 Angular 啟動與本機測試頁路由容器，但根路由在此任務不得接到測試頁；HTTP provider 只供集中 API client 使用。另在 `frontend/src/app/core/api/local-test-fixtures.api.ts` 與 `frontend/src/app/features/local-test/local-test.page.ts`、`.html` 建立可編譯的 typed API client 與本機測試頁最小佔位型別／元件，讓 client 方法可呼叫且頁面可渲染。Client 佔位方法可回傳符合型別的空結果，但不發出 HTTP 請求；頁面不呈現三筆資料、預期標題或逐筆測試標記。
 - [ ] T012 在 `backend/src/main/java/org/harboroffish/localtest/` 建立 `api`、`application`、`fixture` 套件邊界；HTTP 只轉換契約、application 協調使用案例／交易、fixture 封裝資料存取，DTO 不直接使用持久化實體。另在 `application/LoadLocalTestFixtures.java` 建立可編譯、可呼叫且不寫入資料的最小載入佔位入口，回傳可斷言但不符合三筆載入預期的空結果，使 T019 的有效載入測試因缺少預期資料與結果而失敗，不以 `NOT_IMPLEMENTED` 例外製造紅燈。在 `application/ResetLocalTestFixtures.java` 與 `scripts/reset-local-test-data.sh`、`.ps1` 建立可編譯、可呼叫但只回 `NOT_IMPLEMENTED` 的安全 reset 佔位入口，不含任何 DELETE 或資料清除；T038 須能呼叫真實入口並以具體 guard 行為形成有效紅燈。此處不提前實作載入、清除或兩者的 profile 拒絕行為。
 
@@ -99,6 +101,8 @@
 - [ ] T055 [US3] 執行 `npm --prefix frontend test -- --watch=false --include=src/app/features/local-test/local-test.page.spec.ts` 新增案例，確認因缺少狀態／重試行為而有效紅燈；記錄實際選取數及失敗原因，命令尚未實測前維持待驗證。
 - [ ] T056 [US3] 在 `frontend/src/app/features/local-test/local-test.page.ts` 與 `.html` 實作頁面擁有的 `loading | success | empty | error` 狀態與重試，失敗時清除舊成功資料、顯示易懂訊息，所有狀態保留固定「僅供測試」提醒；以 `npm --prefix frontend test -- --watch=false --include=src/app/features/local-test/local-test.page.spec.ts` 重跑 T054 轉綠。重試控制使用原生按鈕，保留或提供清楚可辨識的 `:focus-visible` 樣式。
 - [ ] T057 [US3] 在 `scripts/smoke-local.sh` 與 `scripts/smoke-local.ps1` 建立 local-only 冒煙入口，檢查 `/api/v1/local-test/fixtures` 三筆、單筆路徑、`testOnly`、版本與欄位內容；兩入口只呼叫同一 API 並檢查 HTTP 位址確為 loopback，不以 `localhost` URL 推斷網路監聽綁定；以 T016、T045 契約測試作為先行依據，實際執行與結果留待 T058，不以 curl 成功取代前端畫面驗收。
+
+**驗證服務順序與 port 所有權**：T058–T060 依 plan.md 的分段順序執行完整 Maven verify 與真實 Compose／API／瀏覽器驗收。Reset 測試容器必須使用 T010 定義的專用固定 loopback mapping；不得因 Compose 已占用 `127.0.0.1:5432` 而改用 Compose DB、放寬 port guard 或跳過允許清除測試後宣稱完整通過。記錄各階段的 port 占用／釋放、容器對應及服務啟停結果；未知占用者、綁定不符或未取得刪除授權時，相關命令及依賴驗收維持「待驗證」。
 - [ ] T058 [US3] 依 `specs/001-local-fullstack-skeleton/quickstart.md` 實際核對並執行前端 test/lint/build、`./mvnw -f backend/pom.xml verify`、Checkstyle、OpenAPI 3.1 契約、空白 DB Flyway 啟動與本機 HTTP 冒煙。OpenAPI 檢查須執行可解析 `contracts/openapi.yaml` 的 3.1 parser/validator，並以 `FixtureListContractTest`、`FixtureItemContractTest`、`FixtureErrorAndProfileTest` 實際請求兩條路徑，逐項比對成功與錯誤狀態碼、回應 content type、必要欄位與 schema（含 list/item envelope 及 Problem Details）；執行命令至少包含 `./mvnw -f backend/pom.xml -Dtest=FixtureListContractTest,FixtureItemContractTest,FixtureErrorAndProfileTest test` 與 `./mvnw -f backend/pom.xml verify`，單純 curl 得到 200 不構成契約驗證。查核 Surefire 與 Failsafe 報告檔，記錄 `*IT.java` 實際執行測試名稱/數量及成功失敗數；Maven 命令成功但報告未證明 IT 有執行，不得宣稱 SC-003。另以作業系統 socket/process 實際檢查 API 監聽位址為 `127.0.0.1` 或等價 loopback，將檢查命令與觀察到的綁定位址記錄於 `README.md`，不得以 profile 名稱或 `localhost` URL 代替。根目錄 `README.md` 彙整目標 OS、跨端冒煙與完整驗收，並連到前後端開發規範各自記錄或直接連結的端別實測證據；每項證據須可查到執行目錄、必要服務、版本、實際命令、報告位置、測試數與結果，未成功者保留「待驗證」。US3 完成前，須在瀏覽器分別觀察載入、三筆成功、空集合、API 失敗與重試恢復，確認失敗時不顯示舊成功資料，並記錄結果。空集合畫面以瀏覽器僅攔截列表 GET 並回覆 `data=[]`、`meta.testOnly=true`、`meta.datasetVersion=1.0.0`、`meta.count=0` 的受控回應驗收，不清除既有資料；記錄攔截方式、回應內容與資料來源，解除攔截後再驗真實 API 的三筆畫面。受控回應僅證明前端空狀態，T016 另驗真實 API 載入前的空集合契約，不得將受控回應宣稱為資料庫端到端證據；僅有元件測試或 HTTP 冒煙通過不得標記 US3 完成。
 
 **T058 原始證據**：T058 負責將上述 US3 測試、lint、build、OpenAPI／HTTP、socket 及瀏覽器狀態的實際原始結果各保存一次，逐項標明目標 OS、執行目錄、必要服務與設定、版本、實際命令、報告／紀錄位置、觀察與成功或失敗狀態；未執行者維持「待驗證」。T059–T062 以此紀錄為引用起點，引用不算新的實測或額外通過次數。
@@ -109,7 +113,7 @@
 
 **目標**: 核對範圍、文件與完整重現證據；不得把本階段驗收當作首次公開。
 
-- [ ] T059 在根目錄 `README.md` 明確記錄本次完整驗收所選的單一目標 OS，核對 T058 原始證據與 `specs/001-local-fullstack-skeleton/quickstart.md` 的逐條候選命令及其適用性；補執行該目標 OS 尚未驗證的先決條件檢查、Maven Wrapper 首次下載/啟動、Node/Java/Docker/PostgreSQL 版本、安裝與啟動、測試、載入、清除拒絕、冒煙及完整驗收基線命令。其中 Node 須於根目錄實際執行 `nvm use`、`node --version` 並核對 `frontend/package.json` 的 `engines.node`（`>=22.12.0 <23`）；記錄 `infra/.env.local` 假值範例用法及 DB／API loopback 位址的實測來源。相同程式狀態與目標 OS 下，T058 或先前有效的命令證據直接引用原始紀錄及位置，不因彙整而重跑或重算；後續修改影響的項目須重驗並保留新舊結果的關聯。新補驗才另記執行目錄、必要服務、版本、實際命令、報告位置與結果。執行允許清除或任何可能觸發資料刪除的命令前，須先列出具體命令與專用本機 DB 目標並取得使用者另行明確授權；未獲授權時不得執行，該命令及依賴它的驗收記為「待驗證」。macOS、Linux、Windows 中其他未實測 OS 須逐一記為「待驗證」，不得宣稱跨平台已驗收；只將實際成功者標已驗證，未實際執行的 quickstart 候選命令保持「待驗證」。
+- [ ] T059 在根目錄 `README.md` 明確記錄本次完整驗收所選的單一目標 OS，核對 T058 原始證據與 `specs/001-local-fullstack-skeleton/quickstart.md` 的逐條候選命令及其適用性；補執行該目標 OS 尚未驗證的先決條件檢查、Maven Wrapper 首次下載/啟動、Node/Java/Docker/PostgreSQL 版本、安裝與啟動、測試、載入、清除拒絕、冒煙及完整驗收基線命令。其中 Node 須於根目錄實際執行 `nvm use`、`node --version` 並核對 `frontend/package.json` 的 `engines.node`（`>=22.12.0 <23`）；記錄 `infra/.env.local` 假值範例用法及 DB／API loopback 位址的實測來源。相同程式狀態與目標 OS 下，T058 或先前有效的命令證據直接引用原始紀錄及位置，不因彙整而重跑或重算；後續修改影響的項目須重驗並保留新舊結果的關聯。新補驗才另記執行目錄、必要服務、版本、實際命令、報告位置與結果。執行允許清除或任何可能觸發資料刪除的命令前，須先列出具體命令與專用本機 DB 目標並取得使用者另行明確授權；未獲授權時不得執行，該命令及依賴它的驗收記為「待驗證」。macOS、Linux、Windows 中其他未實測 OS 須逐一記為「待驗證」，不得宣稱跨平台已驗收；只將實際成功者標已驗證，未實際執行的 quickstart 候選命令保持「待驗證」。另核對並同步 `specs/001-local-fullstack-skeleton/quickstart.md` 的候選步序，明確列出整合測試與 Compose／API／瀏覽器驗收的分段安排、固定 port 的使用條件、服務啟停與 volume 保留要求，以及含 DELETE 的 verify 授權閘門；同步後仍只有實際成功的命令與流程可標為已驗證。
 - [ ] T060 在 `README.md` 記錄全新專用 DB 的資料庫／清除完整驗收：Flyway history、載入兩次逐欄一致、清除拒絕矩陣（含其他連線設定合法但實際執行個體身分不同、預期／實際身分無法讀取或權限不足、受管理容器與 JDBC 目標對應無法確認時可辨識拒絕且零 DELETE），以及經使用者另行明確授權後實際執行的允許清除、重新載入和 local/test 外路由／loader/reset 不可用的實際結果；已由 T058 或 T059 在相同程式狀態與目標 OS 證明的項目引用原始證據，只補驗缺漏的資料庫／清除條件，不重算引用為新實測。若尚未授權或執行允許清除，明記該項與依賴結果為「待驗證」，不得宣稱完整驗收。
 - [ ] T061 在根目錄 `README.md` 補驗並記錄 T058 尚未證明的繁中測試頁瀏覽器細節：窄螢幕可讀性、Tab 鍵導覽、鍵盤觸發重試及重試控制的 `:focus-visible` 可見焦點；應用資料請求只走 `/api/v1` 且不直接連資料庫的檢查亦須有實際觀察，HTML、JavaScript、CSS 等靜態資源請求不計入。載入、三筆成功、空集合、API 失敗、清除舊成功資料與重試恢復若已有相同程式狀態及目標 OS 的 T058 有效瀏覽器觀察，直接引用其原始紀錄，不重跑或重算；缺漏或受後續修改影響的項目才補驗。空集合須沿用僅攔截 `GET /api/v1/local-test/fixtures` 的受控空 envelope，記錄攔截方式、回應內容、資料來源及解除攔截後的三筆結果，並與 T016 真實 API 空集合契約分開列示，不得當成資料庫端到端證據。前端開發規範須記錄或直接連到瀏覽器原始實測紀錄；無實際觀察的項目保留待驗證。
 - [ ] T062 在 `README.md` 記錄停止並重啟 API 與前端後，列表與畫面再次顯示相同三筆、全部欄位及標記一致的結果；若任何命令或重啟情境受環境限制，明列限制，不能宣稱 SC-006 或第一階段完整通過。
@@ -117,6 +121,14 @@
 - [ ] T064 依 `specs/001-local-fullstack-skeleton/spec.md` 的 FR-001～FR-016、SC-001～SC-006 與 `docs/development-plan.md` 第一階段逐項比對根目錄 `README.md` 彙整的實際證據與前後端開發規範記錄或連結的端別實測證據；只有在本次明確記錄的單一目標 OS 本機基線命令全數實際成功時，才能判定該 OS 的第一階段完整驗收完成。macOS、Linux、Windows 其餘未實測平台逐一標為「待驗證」，不得宣稱跨平台已驗收，且不因此否定已實測目標 OS 的階段結果。未驗證項目維持未完成，不安排第二至八階段功能或首次公開；候選命令不得記為已驗證。
 
 ## Dependencies & Execution Order
+
+- **群組箭頭的語意**：下列 T019→T020→T021→T022 等箭頭表示責任與相依關係，不表示整組只執行一次紅綠。測試、紅燈確認與最小實作須依每個獨立新行為往返執行。
+
+- **Loader 群組內順序**：T019/T020/T022 先完成非 local/test profile 可辨識拒絕且零寫入的紅綠；再完成完整來源驗證、無效來源可辨識拒絕且零寫入的紅綠。來源驗證完成後，T021 建立並核對 canonical fixture；接著以有效來源完成單交易載入及 SQL／列表 HTTP 逐欄讀回的紅綠。每輪只實作目前行為並回歸先前已完成行為。T029 前，全部來源規則、profile 拒絕及原子載入仍須完整通過。
+
+- **Reset 群組內順序**：T038/T039/T040 依 guard 行為逐項紅綠；目前 guard 的拒絕原因與零 DELETE 證據通過後，才加入下一項獨立 guard。所有 guards 通過的入口在 T040 仍不執行 DELETE；允許清除維持 T041–T043 的獨立切片與另行授權閘門。
+
+- **頁面狀態群組內順序**：T054/T055/T056 依載入中、空集合、失敗並清除舊成功資料、重試恢復、鍵盤操作逐行為紅綠。每個狀態切片同時驗證固定測試提醒仍可見；重試切片回歸已完成狀態。可見焦點樣式仍須另由瀏覽器實際確認。
 
 - **Setup → Foundational → US1 → US2 → US3 → Cross-cutting polish**。US1 先建立可觀察的端到端往返，US2 在同一 fixture 上加強載入與清除，US3 完成錯誤與各端驗收；不得把後續故事的未完成測試算作前一故事已通過。
 - **每個 TDD/回歸切片**：US1 為 T013→T014→T015、T016→T017→T018、T019→T020→T021→T022、T023→T024→T025、T026→T027→T028；T012 的可呼叫 loader 佔位入口先於 T019，T011 建立但不接根路由的可編譯前端佔位入口先於 T023/T026/T029。T029 根路由切片須先寫 `app.routes.spec.ts` 公開行為測試並執行候選測試取得有效紅燈，再改 `app.routes.ts` 接線並重跑同一測試轉綠；之後仍完成原有 DB/API/瀏覽器驗收。該候選命令未實際執行前標「待驗證」。T013-T015 的 PostgreSQL V1 必要限制紅綠循環必須在 T029 首次套用 V1／端到端驗收之前完成。一般 `*Test.java` 使用 Surefire 的 `-Dtest=<測試類> test` 選擇器，`*IT.java` 使用 Failsafe 的 `-Dit.test=<測試類> verify` 選擇器；每項紅燈須記錄實際選取測試、失敗斷言與原因，`NOT_IMPLEMENTED`、編譯／依賴／環境故障均不能替代預期行為失敗。US2 的 T030→T031→T032 是新建 `FixtureSourceValidationTest.java` 的 US1 完整驗證回歸檢查，不要求相同行為再次紅燈；T031 維持 Surefire `-Dtest=FixtureSourceValidationTest test` 與 Failsafe `-Dit.test=FixtureLoadIT verify` 選擇器。T033→T034→T035 專注載入冪等性/canonical upsert，T038→T039→T040、T041→T042→T043 為 reset 拒絕及允許清除切片，T036→T037 使用既有 `FlywayMigrationIT` 做 V1 限制回歸，不建立重複測試；若揭露限制缺口，新增有序 V2 並驗證既有專用 DB 與全新 DB 的 V1→V2 路徑，不修改已套用 V1、不清除或重建 DB。US3 為 T045→T046→T047、T048→T049→T050、T051→T052→T053、T054→T055→T056。每個新增行為切片依紅燈、最小實作、綠燈；已完成行為的回歸切片記錄實際通過結果。
