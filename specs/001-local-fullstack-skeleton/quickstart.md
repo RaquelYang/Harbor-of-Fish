@@ -1,17 +1,23 @@
 # Quickstart: 第一階段本機驗收流程
 
-本文件定義骨架完成後應可重現的驗收順序。**以下全是計畫中的候選命令，尚未在實際骨架執行，狀態均為「待驗證」，目前不可視為已可用的專案指令。**實作後須依產生的 wrapper、script、service 和實際輸出修訂命令，逐條成功執行後才可標為已驗證；根目錄 `README.md` 彙整跨端與完整驗收，前後端開發規範各自記錄或直接連到對應端的實測證據。版本決策見 [research.md](research.md)，資料和契約見 [data-model.md](data-model.md) 與 [contracts/openapi.yaml](contracts/openapi.yaml)。
+本文件定義骨架完成後應可重現的分段驗收順序。**以下列出的專案命令均為候選命令，尚未在實際骨架執行，狀態均為「待驗證」，不可視為已可用指令。**實作後須依實際生成的 wrapper、script、service 和輸出修訂命令，逐條成功執行後才可標為已驗證；根目錄 `README.md` 彙整跨端與完整驗收，前後端開發規範各自記錄或直接連到端別實測證據。版本決策見 [research.md](research.md)，資料和契約見 [data-model.md](data-model.md) 與 [contracts/openapi.yaml](contracts/openapi.yaml)。
 
-T029 首次以本機 DB 驗收前，必須先完成 T013-T015 的 PostgreSQL V1 schema 與必要限制測試，並記錄有效紅燈及綠燈證據。V1 一旦套用即不可原地修改；若後續 T036-T037 回歸發現缺口，新增有序 V2，分別驗證已套用 V1 的專用 DB 升級，以及全新 DB 依序 V1→V2。不得清除或重建既有 DB 作為遷移修正方式。
+T029 是 US1 的首次端到端切片：驗收列表、三筆成功資料、根路由、DB/API/browser 逐欄一致，以及保留 DB volume 的服務重啟。T029 不包含單筆 endpoint、前端空集合／錯誤／重試、reset 或完整驗收；這些屬於 T030 以後的後續驗收。T013–T015 必須先以有效 TDD 紅燈／綠燈完成 PostgreSQL V1 schema 與必要限制測試，T019–T022 必須先完成完整來源驗證、未知欄拒絕及整檔驗證後單交易寫入測試與實作。V1 一旦套用即不可原地修改；T036–T037 若發現缺口，須新增有序 V2，分別驗證已套用 V1 的專用 DB 升級及全新 DB 依序 V1→V2。不得清除或重建既有 DB 作為遷移修正方式。
 
-## Prerequisites
+## 固定位址與執行隔離
 
-- Git checkout 處於 feature 實作完成狀態。
-- Node.js 22.x 且最低 22.12.0 / npm、Java 21、Docker Compose v2 可用；`.nvmrc` 選擇 22 線，`frontend/package.json` 的 `engines.node` 限定 `>=22.12.0 <23`；精確版本待實作後實測。
-- Docker daemon 可啟動 PostgreSQL 18.6 容器。
-- 不需真實憑證、第三方 API、外部資料來源或網路產品環境。
+- PostgreSQL：`127.0.0.1:5432`；Compose local DB 使用專用 `harbor_local` database/user 及獨立 named volume。
+- Local API：`127.0.0.1:8080`。
+- Angular 開發伺服器：`http://localhost:4200`。
+- 一般遷移與載入整合測試使用各自的 Testcontainers 隔離 PostgreSQL，不占用或重用 Compose DB。reset 整合測試則使用另外建立的專用 PostgreSQL 容器，固定發布到主機 `127.0.0.1:5432`，以便保留原有 reset host/port/database/user guards；它不能和 Compose DB 或另一個 reset 容器平行占用該 port。
+- 進入整合測試階段前，Compose postgres、API、Angular 均須停止，且確認 `127.0.0.1:5432` 未占用。若有占用，先確認程序／容器身分；只可停止本次驗收已知且可確認歸屬的服務。若占用者不明或屬其他專案，停止並回報，不終止、不重用、不改用其他 port，也不放寬 guards。reset 容器遇到固定 port 無法使用時，同樣停止並回報，不平行化該案例。
+- 停止 Compose postgres 只釋放 port，不刪除 named volume；之後重啟仍使用原資料、schema 與 Flyway history。不得自動執行 `docker compose down -v`、volume rm、Flyway clean、`DROP` 或 `DELETE` 清理。任何可能執行 DELETE 的驗證或命令，都須事前取得使用者對具體命令與目標的另行明確授權；本機設定、allow-list、Testcontainers 隔離、測試資料標記、reset flag 或確認旗標均不能替代授權。
 
-Candidate version checks — **待驗證**：
+## 0. 版本與依賴準備
+
+前置條件：feature 實作已完成；Node.js 22.x 且至少 22.12.0、npm、Java 21、Docker Compose v2 可用；Docker daemon 可啟動 PostgreSQL 18.6。精確版本須以實際輸出記錄。
+
+**版本檢查候選命令，待驗證：**
 
 ```sh
 nvm use
@@ -21,15 +27,9 @@ java --version
 docker compose version
 ```
 
-於 repository 根目錄執行 `nvm use` 後，核對 `node --version` 的實際版本符合 `frontend/package.json` 的 `engines.node`；若選到低於 22.12.0 的 22.x，先安裝符合範圍的 22.x 再檢查。以上版本檢查尚未執行。
+在 repository 根目錄執行 `nvm use`，核對 Node 實際版本符合 `frontend/package.json` 的 `engines.node`（`>=22.12.0 <23`）；若選到較舊 22.x，先安裝符合範圍的 22.x 再檢查。
 
-## Clean local acceptance
-
-依序操作，任何一步失敗即停止並記錄環境、命令和錯誤；不要略過 Flyway、欄位驗證或環境清除 guard。
-
-### 1. Install dependencies
-
-預期先複製假值範例成不納入版控的 `infra/.env.local`，再安裝依賴。**以下命令待驗證**：
+**依賴準備候選命令，待驗證：**
 
 ```sh
 cp infra/.env.example infra/.env.local
@@ -37,21 +37,42 @@ npm --prefix frontend ci
 ./mvnw -f backend/pom.xml -DskipTests package
 ```
 
-`infra/.env.local` 必須明確指定 `APP_ENV=local`、`DB_HOST=127.0.0.1`、`DB_PORT=5432`、`DB_NAME=harbor_local`、`DB_USER=harbor_local`，密碼使用本機自訂值；範例值是假值，不能作其他環境密碼。套件安裝及包裝結果均待驗證。
+`infra/.env.local` 必須明確指定 `APP_ENV=local`、`DB_HOST=127.0.0.1`、`DB_PORT=5432`、`DB_NAME=harbor_local`、`DB_USER=harbor_local`，密碼使用本機自訂值；範例是假值，不可作其他環境密碼。這些命令尚未執行。
 
-### 2. Start an empty local database
+## 1. 自動整合測試
 
-**待驗證候選命令**：
+開始前確認 Compose postgres、local API 與 Angular 均已停止，並確認 `127.0.0.1:5432` 無占用。先確認占用者；只有可確認為本次已知服務時才停止該服務，不停止其他專案。一般 `*IT.java` 使用各自隔離的 Testcontainers DB；不得連到或重用 Compose DB。固定發布 `127.0.0.1:5432` 的 reset 專用容器只供 reset 整合案例，不得平行執行，也不得因 port 忙碌改埠或略過 guards。
+
+後端測試命名與 Maven 選取方式分開如下：
+
+- Failsafe `*IT.java` 整合測試使用 `-Dit.test=<類別名稱> verify`，例如 T013/T015 的候選命令 `./mvnw -f backend/pom.xml -Dit.test=FlywayMigrationIT verify`、T019/T022 的候選命令 `./mvnw -f backend/pom.xml -Dit.test=FixtureLoadIT verify`。
+- Surefire `*Test.java` 測試使用 `-Dtest=<類別名稱> test`，例如列表契約候選命令 `./mvnw -f backend/pom.xml -Dtest=FixtureListContractTest test`。TDD 期間先記錄對應測試的有效 red，再以同一命令記錄 green。
+- 以上是 T001–T029 前置／US1 可選取的非清除測試候選命令，均待驗證。實際測試類別尚未建立或執行前不得標成可用或已驗證。
+- 自動化整合階段需先完成 T013–T015、T019–T022、T023–T029 涉及的非清除測試。可逐類執行上述選取命令；實際類別與結果尚未產生，持續標示待驗證。
+- `./mvnw -f backend/pom.xml verify` 可能執行 T041 的允許清除 DELETE 案例；未先取得使用者對此具體命令及 reset 專用測試目標的另行明確授權，不得執行，也不得以此命令成功與否代替非清除測試證據。
+
+前端與後端品質命令各自記錄，不互相替代。以下候選命令全部待驗證：
+
+```sh
+npm --prefix frontend test -- --watch=false
+npm --prefix frontend run lint
+npm --prefix frontend run build
+./mvnw -f backend/pom.xml checkstyle:check
+```
+
+`npm test`、`npm lint`、`npm build` 與 backend Checkstyle 是不同驗收證據。Backend `verify` 亦須和 `checkstyle:check` 分開記錄；不得只因單一 Maven lifecycle 成功，就宣稱每個前端命令或 Checkstyle 已執行。
+
+## 2. Compose 與 Flyway／loader
+
+確認自動測試已結束，其 Testcontainers 已釋放 `127.0.0.1:5432`，且 port 無其他占用後，啟動專用 Compose PostgreSQL。**候選命令待驗證：**
 
 ```sh
 docker compose --env-file infra/.env.local -f infra/compose.yaml up -d postgres
 ```
 
-確認容器健康且只發佈 loopback port。T029 首次驗收使用全新、專用且空白的本機資料庫；不可重用其他專案或個人 PostgreSQL 資料目錄。部署/服務名稱、healthcheck 與 volume 行為待實作後驗證。V1 已套用的 DB 後續只能透過新增版本遷移升級，不可用清除或重建取代升級測試。
+確認服務健康，並確認 host port 只發布至 loopback。T029 首次驗收使用全新、專用且空白的 local DB，不可重用其他專案或個人 PostgreSQL 資料目錄。V1 migration 不插入 fixture rows；local API 啟動時 Flyway 套用 `V1__create_local_test_fixture.sql`，migration 失敗時 API 不得就緒。V1 套用後只能透過新增版本遷移升級。
 
-### 3. Apply migration and load fixed data
-
-後端 local profile 啟動時先由 Flyway 套用 `V1__create_local_test_fixture.sql`；migration 失敗時 API 不得就緒。啟動 API 及執行完整驗證後才寫入 fixture。**待驗證候選命令**：
+後續 Compose／Flyway、API 與 loader 候選命令仍待驗證：
 
 ```sh
 set -a
@@ -60,7 +81,7 @@ set +a
 ./mvnw -f backend/pom.xml spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
-在另一個終端，以相同 local 設定執行 loader。**待驗證候選命令**：
+在另一個終端，以同一 local 設定執行 loader：
 
 ```sh
 set -a
@@ -69,48 +90,45 @@ set +a
 ./scripts/load-local-test-data.sh
 ```
 
-Loader 先檢查完整 JSON（恰三筆、欄位型別與必填、長度與 pattern、固定 ID/key 唯一、同一 datasetVersion、`testOnly=true`），完整有效才在單一交易 canonical upsert。成功輸出版本和筆數，不輸出密碼。對同一來源再執行一次並比較筆數及每個欄位值：期望仍是三筆且完全一致。檔案無效的拒絕和零部分寫入由自動測試驗證。
+Loader 須先驗證完整 JSON（恰三筆、欄位型別與必填、長度與 pattern、固定 ID/key 唯一、同一 datasetVersion、`testOnly=true`），全部有效後才在單一交易 canonical upsert。成功輸出版本和筆數，不輸出密碼。T029 只要求載入 canonical 三筆並逐欄驗證；「同一來源載入兩次」及「來源 canonical 值覆寫既有相同 `fixtureKey`」是 T033 以後的新切片。檔案無效時拒絕且零部分寫入沿用 T019 的案例作既有綠燈回歸；除非指出具體尚未涵蓋的邊界，不重複安排相同行為的新紅燈。
 
-### 4. Verify API and front end
+## 3. API
 
-**待驗證候選命令**：
+API 只在 Flyway 成功後就緒。固定 API 位址為 `http://127.0.0.1:8080`。T029 先驗列表、三筆成功資料與逐欄 DB/API 相符；單筆 endpoint 與 400/404 錯誤屬 T045 以後驗收。
+
+**列表 API 候選命令，待驗證：**
 
 ```sh
 curl --fail-with-body http://127.0.0.1:8080/api/v1/local-test/fixtures
-curl --fail-with-body http://127.0.0.1:8080/api/v1/local-test/fixtures/sample-one
+```
+
+回應應有三筆，list 欄位符合 OpenAPI，records 與 metadata 均有 `testOnly: true`。前端 proxy 使用 `/api` 轉送 API，不連資料庫。API 實際回應、資料庫逐欄對照及 loopback 綁定位址均尚未實測。
+
+## 4. Angular 瀏覽器
+
+**Angular 開發伺服器候選命令，待驗證：**
+
+```sh
 npm --prefix frontend start
 ```
 
-列表回應應有三筆，item/list 欄位符合 OpenAPI，所有 records 與 metadata 都有 `testOnly: true`。有效但不存在 key 預期為 404 `FIXTURE_NOT_FOUND`；格式無效 key 預期為 400 `INVALID_FIXTURE_KEY` 和欄位錯誤；任何 error body 都不能有 stack trace、SQL、secret 或內部 hostname。用 local profile 以外設定呼叫時，預期 endpoint 不存在/不可用。前端以 `/api` proxy 連到 API，不連資料庫。
+在瀏覽器開 `http://localhost:4200`。T029 僅驗收根路由、固定繁中測試提醒、三筆成功列表、逐欄 DB/API/browser 可見內容及測試標記；需記錄 API 列表和畫面欄位一致。真實 API 載入前空集合契約已屬 T016；T028 已要求成功頁面在窄螢幕基本可讀。單筆 endpoint、前端 loading/empty/error/retry 狀態與詳細鍵盤／焦點驗收依 T030 以後的對應任務進行，不把受控瀏覽器空集合回應算作真實 DB/API 證據。
 
-在瀏覽器開 `http://localhost:4200`（port 待 Angular CLI 確認）檢查繁體中文測試頁：固定可見「僅供本機測試，非真實漁港、魚種、漁季、價格或限制資料」；分別確認 loading、三筆成功、空集合、API unavailable/error、retry 狀態及鍵盤可操作性。空集合畫面以瀏覽器僅攔截 `GET /api/v1/local-test/fixtures` 並回覆符合契約的 `data=[]`、`meta.testOnly=true`、`meta.datasetVersion=1.0.0`、`meta.count=0` 驗收，無須清除既有 DB 資料；記錄攔截方式、受控回應內容及測試資料來源，解除攔截後再確認真實 API 的三筆成功畫面。此受控回應只證明前端空狀態，真實 API 的空集合契約由 T016 的 HTTP 測試另證，不得宣稱此步驟已驗證資料庫端到端空集合。API 不可用時不可展示看似成功的 fallback fixtures。瀏覽器步驟待 UI 實作後執行。
+前端空集合後續可用受控瀏覽器回應驗收：只攔截 `GET /api/v1/local-test/fixtures`，回覆符合契約的 `data=[]`、`meta.testOnly=true`、`meta.datasetVersion=1.0.0`、`meta.count=0`，無須清除 DB。記錄攔截方式、受控回應及資料來源；解除攔截後另確認真實 API 三筆成功。這只證明前端空集合呈現；真實 API 在載入前的空集合契約由 T016 HTTP 測試證明，不能把受控回應當成資料庫端到端證據。API 不可用時不可顯示假成功 fixtures。
 
-### 5. Test, lint and build
+## 5. 保留 volume 的服務重啟
 
-**全數待驗證候選命令**：
+記錄列表 API 與 browser 顯示的三筆資料、所有可見欄位及 `testOnly` 標記。停止本次驗收啟動的 API、Angular 與 Compose postgres；停止 Compose postgres 只釋放 `127.0.0.1:5432`，保留 named volume、schema、fixture rows 與 Flyway history。確認 port 由本次流程釋放後，以同一 Compose 設定重啟 postgres，再啟動 API 與 Angular，重讀列表並重新開啟測試頁，逐欄比對重啟前後完全相同。不得使用 `down -v`、volume rm、Flyway clean、`DROP` 或 `DELETE` 清理來達成重啟驗收。所有重啟命令及結果目前待驗證；T029 的此流程與重啟後證據記錄於 `README.md`。
 
-```sh
-npm --prefix frontend test -- --watch=false
-npm --prefix frontend run lint
-npm --prefix frontend run build
-./mvnw -f backend/pom.xml test
-./mvnw -f backend/pom.xml checkstyle:check
-./mvnw -f backend/pom.xml verify
-```
+## 另行授權階段：reset 與完整驗收
 
-Test suites 須涵蓋 API success/error/input, profile boundary, exact persistence values, Flyway clean database startup, malformed fixture atomic rejection, duplicate load, safe reset guards, Angular loading/success/empty/error/retry and visible test labels. DB integration 使用 PostgreSQL Testcontainers，不使用 H2。實際 scripts/goals 是否建立及執行成功待後續實作，不能由計畫文件推定。
+以下 reset 命令只供參考，尚未實作或執行，狀態為「待驗證」；列出命令不構成執行授權。任何可能觸發 DELETE 的 reset 命令、`ResetLocalFixtureIT` 允許清除案例，以及可能納入該案例的完整 `verify`，都必須先列出具體命令及目標資料庫／測試容器，並取得使用者另行明確授權。未獲授權不得執行或宣稱驗收通過。
 
-### 6. Smoke, restart and safe reset
+reset 預期須保留並同時通過以下所有既有 guards：`APP_ENV=local`、`RESET_LOCAL_TEST_DATA=YES`、`--confirm-local-fixture-delete`、啟動 profile 為 local/test、JDBC host=`127.0.0.1`、port=`5432`、database=`harbor_local`、user=`harbor_local`、連線後 `current_database()`=`harbor_local`，以及 URL／環境設定解析與連線成功。DELETE 前，必須由待清除 JDBC URL 與同組環境變數之外、repository 管理的專用 Compose PostgreSQL 獨立管理通道取得預期 `pg_control_system().system_identifier`；實際 identifier 由待清除 JDBC 連線讀取。整合測試則以明確建立並持有管理資訊的專用隔離 PostgreSQL 容器作預期值來源。必須確認受管理容器與 JDBC 目標確實對應且 identifier 相同；不得從待清除連線或可任意覆寫參數提供預期值。identifier 相同不能取代任何上述 guards，也不能證明本機性。
 
-冒煙流程確認測試頁透過 API 讀到 database rows。**候選命令待驗證**：
+若預期或實際 identifier 無法取得、讀取權限不足、受管理容器與 JDBC 目標的對應無法確認、identifier 不符，或任何原有 guard 缺漏／不符／解析失敗，必須在任何 DELETE 前以可辨識原因拒絕、非零退出、零 DELETE 並保留所有資料；不得降級只檢查設定或加 bypass。Reset 容器固定使用 `127.0.0.1:5432`，不可平行；port 已占用時先查明占用者，只停止本次已知服務，否則停止驗收，不重用占用者、不改埠、不放寬 guards。完整 verify 若包含此 DELETE 測試，也受相同授權閘門限制。
 
-```sh
-./scripts/smoke-local.sh
-```
-
-停止 API 與前端再啟動，重讀列表並逐欄比對三筆資料與 marker 完全相同。
-
-重設僅用於本機 fixture rows。以下仍是候選流程，尚未實作或實際執行，狀態為「待驗證」。執行前除確認原有環境、loopback、port、database、user、啟動 profile、確認旗標及 JDBC 登入連線後的 `current_database()` 均符合計畫，還必須由 repository 管理的專用 Compose PostgreSQL 獨立管理通道取得預期 `pg_control_system().system_identifier`，並透過待清除 JDBC 連線讀取實際 identifier；確認受管理容器與 JDBC 目標確實對應且兩值相同後，才可進入允許清除流程。若為整合測試，預期值來源必須是測試明確建立的隔離 PostgreSQL 容器。不得從待清除 JDBC URL／同組環境變數或可任意覆寫參數提供預期值；單獨的 identifier 也不能證明本機性，因此不能省略原有 guards。無法取得預期或實際值、讀取權限不足、容器對應無法確認或兩值不符，均須在任何 DELETE 前以可辨識原因拒絕且零 DELETE。此受管理來源與 JDBC 值的比對只是額外 guard，不能取代使用者對具體命令及目標另行明確授權；未取得授權不得執行任何可能刪除資料的命令或測試。
+**Reset 候選命令，待驗證且未授權不得執行：**
 
 ```sh
 set -a
@@ -119,8 +137,22 @@ set +a
 APP_ENV=local RESET_LOCAL_TEST_DATA=YES ./scripts/reset-local-test-data.sh --confirm-local-fixture-delete
 ```
 
-拒絕案例必須先以自動測試驗證，包括 `APP_ENV` 缺漏或非 local、確認變數／旗標缺漏、非 loopback host、port/database/user 不符、連線實際 database 不符、環境設定解析失敗；新增「所有原有連線設定合法但預期與實際 `system_identifier` 不同」、「預期值來源無法讀取或權限不足」、「待清除 JDBC 實際身分讀取／權限不足」及「受管理 Compose／隔離測試容器與 JDBC 目標對應無法確認」案例。每個拒絕案例須在任何 DELETE 前回報可辨識原因、非零結束、確認零 DELETE 並保留所有資料；身分比對成功不能取代使用者對具體命令與目標的另行明確授權。只有另行獲得授權且全部 guards 通過後，允許清除流程才可驗證只有 `local_test_fixture` 中 `test_only=true` rows 消失；schema、Flyway history 與其他 table 不變。再次執行 loader 後應恢復三筆 canonical rows，重跑冒煙和 UI 驗收。不得以資料庫或 schema drop 取代本程序。
+獲得具體授權且全部 guards 通過後，才可驗證只刪除 `local_test_fixture` 中 `test_only=true` rows，schema、Flyway history 及其他 table 不變；之後重載並逐欄確認恢復三筆 canonical rows。這是 reset／後續完整驗收，不屬 T029。本文件任何階段都不得自動執行 `docker compose down -v`、volume rm、Flyway clean、`DROP` 或資料清理 `DELETE`。
 
-## Acceptance record to produce after implementation
+## 驗收證據與尚未驗證項目
 
-根目錄 `README.md` 應明確記錄本次完整驗收的單一目標 OS，並彙整該 OS 的 Node/Java/Docker/PostgreSQL 實際版本、執行目錄、必要 local services、跨端冒煙／重啟與逐條基線命令及結果；前端、後端開發規範各自記錄或直接連結對應端的實測命令、報告與結果。該 OS 本機基線命令須全數實際成功，才符合 SC-006 及該目標 OS 的第一階段完整驗收。macOS、Linux、Windows 其餘未實測平台須逐一標記「待驗證」，不得宣稱跨平台已驗收，但不因此否定已實測目標 OS 的階段結果。候選命令若未實際成功，持續標記待驗證；不得視為可用命令或完整驗收證據。
+TDD red/green 應逐個新行為記錄選取測試、失敗斷言及原因，再記錄同一案例轉綠；已通過的 T019 無效來源零部分寫入只記既有綠燈回歸。T029 必須分開保存自動測試、Flyway／資料庫、真實 API、受控瀏覽器（若後續使用）及服務重啟證據。受控瀏覽器空集合只代表 UI 證據，不代表真實 API／DB。不可變 V1 的 PostgreSQL 限制紅綠證據及任何 V2 升級證據需另列。T030 以後的單筆 endpoint、前端 empty/error/retry、reset、lint/build 以外的全量驗收皆依其任務階段完成。
+
+每項候選命令須記錄執行目錄、必要服務、實際版本、命令、報告位置及結果；未執行、未成功或未獲授權的項目一律標示「待驗證」。README 彙整單一目標 OS 的跨端與完整驗收；前後端開發規範各自記錄或直接連到實測證據。不得把文件命令、orchestrator 測試或受控瀏覽器回應宣稱為產品端已驗證。
+
+## 後續冒煙與完整驗收（T057–T064）
+
+T057 建立 `scripts/smoke-local.sh` 後，依 T058 執行並記錄跨端冒煙；本候選命令尚未實作或執行，維持「待驗證」：
+
+```sh
+./scripts/smoke-local.sh
+```
+
+US2／US3 完成後，再依 T058–T064 驗收單筆 API、錯誤契約、profile 邊界、前端狀態與鍵盤操作、reset、冒煙及重啟；任何可能觸發 DELETE 的命令或測試仍須事先取得對具體命令及目標的另行明確授權。T059–T062 引用相同程式狀態與目標 OS 的既有有效證據，只補缺漏或受修改影響項目，不重複計數。
+
+SC-006 與第一階段完整驗收須以本次明確記錄的單一目標 OS 為準，其全部本機基線命令均須實際成功；README 彙整完整結果，前後端開發規範記錄或直接連到對應端證據。未執行、未成功、未獲授權或受環境阻擋的命令均保留「待驗證」，且不得宣稱該 OS 完整驗收完成。macOS、Linux、Windows 其餘未實測平台逐一標「待驗證」，不宣稱跨平台通過，也不否定已實測目標 OS 的階段結果。

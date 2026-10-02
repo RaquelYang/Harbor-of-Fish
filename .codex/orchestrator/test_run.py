@@ -262,7 +262,14 @@ class RunnerTests(unittest.TestCase):
         self.assertTrue((round_dir / "implementer-output.txt").is_file())
         self.assertEqual((round_dir / "reviewer-output.txt").read_text(), fenced_review)
         self.assertIn("acceptance_criteria", (round_dir / "reviewer-prompt.txt").read_text())
-        self.assertEqual(len(json.loads((round_dir / "validation.json").read_text())), 3)
+        validation_results = json.loads((round_dir / "validation.json").read_text())
+        expected_commands = self.plan["validation_commands"]
+        self.assertEqual(len(validation_results), len(expected_commands))
+        self.assertEqual([item["name"] for item in validation_results], list(expected_commands))
+        self.assertEqual(
+            {item["name"]: item["argv"] for item in validation_results}, expected_commands
+        )
+        self.assertTrue(all(item["returncode"] == 0 for item in validation_results))
         self.assertEqual(json.loads((run_dir / "summary.json").read_text())["status"], "passed")
 
 if __name__ == "__main__":
